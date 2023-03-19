@@ -1,0 +1,833 @@
+\documentclass[twoside]{article}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{pgfplots}
+\usepackage{multicol}
+\usepackage[hmarginratio=1:1,top=32mm,columnsep=20pt]{geometry}
+\usepackage{fullpage}
+\usepackage{pdflscape}
+
+
+\begin{document}
+\parindent=0in
+\parskip=12pt
+
+%\twocolumn[
+%
+%\aistatstitle{}
+%
+%\aistatsauthor{ Max Sklar }
+%
+%\aistatsaddress{ Foursquare Labs } 
+%
+%]
+
+\title{Fast MLE Computation for the Dirichlet Multinomial}
+
+\author{Max Sklar\\
+Foursquare Labs\\
+max@foursquare.com
+}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+Given a collection of categorical data, we want to find the parameters of a Dirichlet distribution which maximizes the likelihood of that data.  Newton's method is typically used for this purpose but current implementations require reading through the entire dataset on each iteration.  In this paper, we propose a modification which requires only a single pass through the dataset and substantially decreases running time.  Furthermore we analyze both theoretically and empirically the performance of the proposed algorithm, and provide an open source implementation.
+\end{abstract}
+
+\section{Introduction}
+
+The Dirichlet distribution has long been used as a conjugate prior for the multinomial distribution, giving statisticians access to analytically tractible priors. Since the Dirichlet is so central to Bayesian statistics, it is important to have a simple computation to estimate its parameters. Here we consider the maximum likelihood estimate.
+
+\subsection{Motivation}
+
+One use for the Dirichlet prior is to avoid overfitting the estimate of a multinomial distribution from a small amount of data.  For example, consider a recommendation engine that aggregates user-generated ratings.  With only a few users weighing in on a given item, the maximum likelihood estimate of the rating distribution can be very inaccurate.  The Dirichlet prior prevents the estimate from being overfit when only one or two users have left an opinion.
+
+In an example of higher dimension, the relative popularity of a venue on Foursquare at a given time of week is estimated using a Dirichlet prior\cite{sklar}.  The week is divided in to $168$ buckets, each representing one hour in the week.  The timeliness distribution of a venue starts out with a Dirichlet prior, and is updated whenever new data is received.  The Dirichlet prior is originally derived from using many similar Foursquare venues, using an algorithm similar to the one described in this paper.
+
+Of course, not all applications of the Dirichlet prior are new.  In the 1960s, James Mosimann found applications in analyzing biological data\cite{mosimann}.  In one example, there were 4 types of pollen found in pollen cores at different levels.  For each core, only $100$ grains of pollen were counted, giving relatively sparse data for any given core.  However, even with only 73 cores analyzed, a lot more could be said about the data after modeling it as a Dirichlet-multinomial\cite[pg 8]{ng}\cite{mosimann}.
+
+A Dirichlet distribution is much simpler to estimate if the data comes in the form of multinomial distributions drawn from that Dirichlet.  But what if we only have access to a few samples from each multinomial?  In fact, if we already had the full multinomial, or had sampled it so heavily that the maximum likelihood estimate is accurate, there would be no need for a Dirichlet prior in the first place.
+
+Perhaps the largest motivation for this effort is that the Dirichlet and Dirichlet-multinomial distributions can be used as part of a larger system. Consider that the K-means algorithm cannot perform well without an efficient calculation for the mean of a set of points. Likewise, a mixture of Gaussians cannot be computed without first computing one Gaussian.  If one intends to build a mixture model of Dirichlet distributions by using the Expectation-Maximization algorithm, having a fast computation for individual Dirichlet multinomials is very important.
+
+Dirichlet distributions are also widely used in topic models for Natural Language Processing.  For example, the latent Dirichlet allocation requires a computation of the MLE for a Dirichlet\cite{blei}\cite{heinrich}\cite{wallach}.  As the datasets grow larger and the models more complex, the demand for computational efficiency increases.  
+
+\subsection{Previous Work}
+
+In 1989, Gerd Ronning published a paper on estimating a Dirichlet from a set of multinomial-valued samples\cite{ronning}.  This paper contains a proof that the objective function is globally concave and therefore the Newton-Raphson method will converge to a solution \cite[pg 73]{ng}.  In 1990, Narayanan published a paper on the MLE computation of the Dirichlet including an implementation in Fortran\cite{narayanan}. He cites various examples of Dirichlet distributions being used for statistical models going back to the 1960s and 1970s, including Mosiman's work on serum protiens in white Pekan ducklings\cite[pg 8]{ng}.
+
+In 2000, Thomas Minka\cite{minka} wrote about the MLE for Dirichlet distributions, and later wrote an implementation in Matlab.
+
+Much work has also been done in finding an initialization for the Newton-Raphson method \cite[pg 74-54]{ng}.  In 1980, Dishon and Weiss\cite{dishon} proposed using the simple method of moments for the Beta distribution \footnote{the 2-dimensional case of the dirichlet distribution}.  In 1989, Ronning\cite{ronning} produced a new initialization and proved that it was guaranteed to stay within the bounds for the first Newton-Raphson step.  In 2003, Hariharan and Vela\cite{hariharan} proposed a new, simpler, method for initialization.  And finally in 2008, Wicker et al\cite{wicker}, proposed a Maximum Likelihood Approximation method which was shown to work more efficiently with some standard data sets.
+
+All of that work assumes direct access to the multinomial distribution, and not from just count data.  Minka\cite{minka} tackles this problem in 2000 and describes the computations for finding the MLE of a Dirichlet multinomial.   His algorithms include the Newton-Raphson method and a fixed-point iteration.  He also includes a Matlab implementation.  In 2008, Hanna Wallach reviews Minka's algorithms, and develops a new fixed-point iteration based on a mathematical transformation of the digamma function leading to a precomputation.  Ng et al\cite{ng} in 2011 also describe the mathematics, and say that ``in general, Newton's method provides the fastest means for finding the MLE''.
+
+This paper builds on the work of Minka and Wallach to compute the MLE of a Dirichlet-multinomial distribution.  The proposed algorithm uses the Newton-Raphson method, and arrives at the same value as other MLE methods\footnote{In fact, given the same initial conditions, every iteration of Newton-Raphson is untouched.}.  It takes advantage of a precomputation that can be made using the properties of the digamma and trigamma function, not unlike Wallach's approach in the fixed-point case.  The proposed algorithm is faster in a wide range of circumstances, particularly in the case where count data for each multinomial instance is scarce.
+
+\section{Definitions and Conventions}
+
+The \textit{gamma function} is a positive-valued function whose domain is the positive real numbers.\footnote{It is typically generalized to complex numbers but only positive values are considered in this paper.}
+
+\[\Gamma(x)=\int_0^\infty t^{x+1}e^{-x}dx\]
+
+The gamma function of a positive integer n is equivalent to n minus 1 factorial:
+
+\[\Gamma(n)=(n-1)!\]
+
+For this paper, define the dual-input gamma function of a positive number and a whole number, \(n\).  This function is non-standard, but it is useful because of it’s computational property; it is equivalent to an \(n\)-factor multiplication problem.
+
+\[\Gamma(a,n)=\frac{\Gamma(a+n)}{\Gamma(a)}=\prod_{i=0}^{n-1}(a+i)\]
+
+The dual-input log-gamma function is equivalent to the log of the previous function, and can be computed as an \(n\)-step addition problem. This function is also not standard, but is defined for the purpose of this paper to make equations simpler and more clear.
+
+\[L\Gamma(a,n)=\sum_{i=0}^{n-1}\ln(a+i)\]
+
+A \textit{\(K\)-dimensional multinomial distribution} is a probability distribution over K discrete and mutually exclusive outcomes.  A multinomial distribution is represented by a \(K\)-dimensional vector $\mathbf{p}$, where all the values sum to 1.
+
+\[\sum_{i=0}^{K-1}p_i=1\]
+
+Suppose that a multinomial distribution is sampled n times.  These \(n\) pieces of data can be compressed into a K-dimensional count vector \(\mathbf{c}\), where \(c_k\) is the number of times category \(k\) appears in the data set.  The counts all sum to $n$.
+
+\[\sum_{k=1}^{K-1}c_k=n\]
+
+A \textit{\(K\)-dimensional Dirichlet distribution} is a family of probability distributions over the space of K-dimensional multinomial distributions.  It is parameterized by a K-dimensional vector $\alpha$.
+
+\[\mathcal{D}(\mathbf{p},\mathbf{\alpha})=\frac{\prod_{k=0}^{K-1}\Gamma(\alpha_i)}{\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right)}\prod_{k=0}^{K-1}{p_i}^{\alpha_k-1}\]
+
+The Dirichlet distribution is a \textit{conjugate prior} for the multinomial distribution.  If the Dirichlet distribution represents the prior probability over a multinomial \(\mathbf{p}\), and $n$ samples are drawn from \(\mathbf{p}\) yielding a count vector \(\mathbf{c}\), the posterior distribution is also a Dirichlet.
+
+If the prior distribution is $P(\mathbf{p})=\mathcal{D}(\mathbf{p},\mathbf{\alpha})$ then the posterior distribution is $P(\mathbf{p} | \mathbf{c})=\mathcal{D}(\mathbf{p},\mathbf{\alpha} + \mathbf{c})$.
+
+The \textit{expected value of a Dirichlet distribution} is equal the vector $\alpha$ normalized.
+
+\[\mathbb{E}(\mathcal{D}(\mathbf{p},\mathbf{\alpha}))=\frac{\mathbf{\alpha}}{\sum_{i=0}^{K-1}\alpha_i}\]
+
+An intuitive notion of the Dirichlet distribution is that each $\alpha$ value puts some weight on each category before the data is collected.  As more data is taken into account, the initial $\alpha$ values become less relevant and the data is allowed to speak for itself.
+
+The probability distribution over the possible configurations of a count vector given a Dirichlet distribution is the \textit{Dirichlet-multinomial distribution}.  It is derived as follows:
+\[P(\mathbf{c}|\mathbf{\alpha})=\int_{\mathbf{p}}P(\mathbf{c}|\mathbf{p})P(\mathbf{p}|\mathbf{\alpha})\]
+\[P(\mathbf{c}|\mathbf{\alpha})=
+\frac{\prod_{i=0}^{K-1}\Gamma(\alpha_i,c_i)}{\Gamma\left(\sum_{i=0}^{K-1}\alpha_i,\sum_{i=0}^{K-1}c_i\right)}
+\frac{\Gamma\left(1,\sum_{i=0}^{K-1}c_i\right)}{\prod_{i=0}^{K-1}\left(\Gamma(1,x_i)\right)}
+\]
+
+Finally, the \textit{maximum likelihood estimate (MLE)} for a parameterized probability distribution are those parameters which maximize the likelihood of the data.
+
+\[MLE(\mathbf{\alpha})=\arg\max_\mathbf{\alpha}\ P(\mathbf{c}|\mathbf{\alpha})\]
+
+\section{Overview of the Problem}
+
+Suppose that $N$ samples are drawn from a Dirichlet distribution, and we want to find the MLE of the parameter $\alpha$.  There are two cases to consider.
+
+In the Dirichlet problem, there is direct access to the multinomial distribution of each sample.  The data is shown in Table~\ref{tab:d}, where each row is a sample, and each column represents the probability of one of the $K$ categories.
+
+\begin{table}[h] \centering
+\begin{tabular}{ l | l l l | l}
+  sample & \(k=0\) & \(k=1\) & \(k=2\) & sum \\ \hline
+  0 & 0.21 & 0.37 & 0.42 & 1\\
+  1 & 0.56 & 0.15 & 0.29 & 1\\
+  \vdots & \vdots & \vdots & \vdots & \vdots\\
+  \(n-1\) & 0.14 & 0.33 & 0.53 & 1\\
+\end{tabular}
+\caption{Dataset in the Pure Dirichlet Problem}\label{tab:d}
+\end{table}
+
+In the \textit{Dirichlet-multinomial problem}, the multinomial distributions are not directly observed. Instead, a sample is recorded from each one.  This is far more common in practice, since counts are directly observable.  This dataset still has N rows and K columns, but each value now represents a count rather than a probability.
+
+\begin{table}[h] \centering
+\begin{tabular}{ l | l l l | l}
+  sample & \(k=0\) & \(k=1\) & \(k=2\) & sum \\ \hline
+  0 & 3 & 14 & 0 & 17\\
+  1 & 1 & 16 & 3 & 20\\
+  \vdots & \vdots & \vdots & \vdots & \vdots\\
+  \(n-1\) & 6 & 3 & 10 & 19\\
+\end{tabular}
+\caption{Dataset in the Dirichlet Multinomial Problem}\label{tab:dm}
+\end{table}
+
+In both cases, the Newton-Raphson method can be used to accurately compute the MLE\cite{minka}.  The pure Dirichlet case is relatively fast because a \textit{sufficient statistic} compressing all the data into a single \(K\)-dimensional vector can be precomputed.  Unfortunately, the Dirichlet-multinomial problem cannot be reduced in the same way, making it an order of magnitude slower.
+
+The logical improvement is therefore to find an alternative pre-computation on the Dirichlet-multinomial data to speed up the algorithm.  Instead of compressing the data into a \(K\)-dimensional vector, the Dirichlet-multinomial data can in fact be compressed into a \(K\) x \(M\) matrix, and an \(M\)-dimensional vector, where \(M\) is the maximum number of categories sampled in any particular row.
+
+\section{The Fast Dirichlet Solution}
+\label{fastdirichlet}
+
+This is equivalent to the solution documented by Minka\cite{minka} (2000), Blei\cite[A.4.2]{blei} (2003) and Ng\cite[pg 72-73]{ng} (2011).  The dataset for the Dirichlet problem is an \(N\) x \(K\) matrix $D$ in which each row represents a sample from a single Dirichlet.  Let $d_{n,k}$ represent the nth row and kth column of matrix $D$.  Given a Dirichlet parameter $\alpha$, the probability of the dataset is given as follows:
+\[
+P(D|\alpha)=\prod_{n=0}^{N-1}\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right)\prod_{k=0}^{K-1}\Gamma(\alpha_k)^{-1}d_{n,k}^{\alpha_k-1}
+\]
+We want to maximize this probability with respect to $\alpha$.  One way to do this is to build and maximize a function $F$, which is related to the log of the probability.
+\begin{equation}
+\ln(P(D|\alpha))=\sum_{n=0}^{N-1}\ln\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right) + \sum_{n=0}^{N-1}\sum_{k=0}^{K-1}\left[-\ln\Gamma(\alpha_k) + (\alpha_k-1)\ln\left(d_{n,k}\right)\right]
+\end{equation}
+We can distribute the summations and remove the constant terms.\footnote{Note that we divided the entire equation by $N$.  The number of samples does not factor in to the MLE, but it does control the variance around that value.}
+\begin{equation} \label{eq:dirichf}
+F(\alpha)=\ln\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right) - \sum_{k=0}^{K-1}ln\Gamma(\alpha_k) + \sum_{k=0}^{K-1}\alpha_k\left(\frac{1}{N}\sum_{n=0}^{N-1}\ln\left(d_{n,k}\right)\right)
+\end{equation}
+
+In this form, only one term involves the data. This term is called the \textit{sufficient statistic} and will be set as the vector $\mathbf{v}$. The sufficient statistic can be computed with one pass through the data.
+
+\[v_k=\frac{1}{N}\sum_{n=0}^{N-1}\ln\left(d_{n,k}\right)\]
+
+The distinction separating the Dirichlet and the Dirichlet multinomial cases is that the Dirichlet case has a sufficient statistic of constant dimension.  In fact, this is true of all exponential distributions\cite[pg 116]{robert}.  The function to maximize now looks like this:
+
+\[
+F(\alpha)=\ln\Gamma(\sum_{k=0}^{K-1}\alpha_k)-\sum_{k=0}^{K-1}\ln\Gamma(\alpha_k)+\sum_{k=0}^{K-1}\alpha_kv_k
+\]
+
+In order to use the Newton-Raphson method, we need to compute the gradient vector $\mathbf{g}$ and the Hessian matrix $H$.  The formula for a single step is as follows:
+
+\[\alpha_{new}=\alpha_{old}-H^{-1}\mathbf{g}\]
+
+The values for $H$ and $\mathbf{g}$ also require only the vector $\mathbf{v}$, and not the full dataset.
+
+We will use the following derivatives:
+\[
+\begin{array}{cc} \Psi(x) = \frac{d}{dx} \ln\Gamma(x) & \Psi'(x) = \frac{d}{dx} \Psi(x)
+\end{array}
+\]
+These functions, along with gamma are available in most numeric libraries.  The Python code linked to this paper uses the Numpy library.  In the past Narayanan\cite{narayanan} and Minka\cite{minka} relied on Fortran and Matlab implementations respectively.
+
+The gradient is given as follows:
+\[
+g_k=\Psi(\sum_{k=0}^{K-1}\alpha_k)-\Psi(\alpha_k)+v_k
+\]
+
+The Hessian matrix consists of a constant matrix, plus a diagonal.  Let $\mathbb{I}_{i,j}$ be the indicator function that is equal to $1$ if $i = j$ and $0$ otherwise.
+
+\[
+h_{i,j}=\Psi'(\sum_{k=0}^{K-1}\alpha_k)-\Psi'(\alpha_i)\mathbb{I}_{i,j}
+\]
+
+There is a formula for efficiently inverting this type of matrix, and it is a special case of the matrix inversion lemma\cite{woodbury}.  The technique is also used by Minka\cite{minka} (2000) and Blei\cite[A.2]{blei}(2003) for Dirichlet-based machine learning.  Let the vector representing the diagonal be $\mathbf{d}$, and the scalar constant in the constant matrix be $c$.  The formula computing the inverse Hessian is as follows:
+
+\[
+H=I\mathbf{d} + \mathbf{1}\mathbf{1}^Tc
+\]
+
+\begin{equation}
+H^{-1}=I\mathbf{d}^{-1}-\frac{\mathbf{d}^{-1}\mathbf{1}\mathbf{1}^T\mathbf{d}^{-1}}{c^{-1}+\sum_{k=0}^{K-1}d_k^{-1}}
+\label{eq:invert_hessian}
+\end{equation}
+
+\begin{algorithm}
+  \caption{Algorithm for $1$ Newton Step}
+  \begin{algorithmic}
+  \Function{Step}{$\alpha,\mathbf{g},\mathbf{d},c$}
+  \State $x_k \leftarrow g_k-\alpha_kd_k$
+  \State $Z \leftarrow 0$
+  \For  {$k=0$ to $K-1$}  \State $Z \leftarrow Z + \alpha_k / x_k$ \EndFor
+  \State $Z \leftarrow Z*c$
+  \State $S \leftarrow 0$
+  \For  {$k=0$ to $K-1$}  \State $S \leftarrow S + 1/(1+Z)/x_k$ \EndFor
+  \For  {$k=0$ to $K-1$}  \State $\delta_k \leftarrow S + x_k*(1-\mathbf{c}*\alpha_i*S)$ \EndFor
+  \State \Return $\delta$
+  \EndFunction
+  \end{algorithmic}
+  \label{alg:step}
+\end{algorithm}
+
+Algorithm~\ref{alg:step} calculates one Newton step given the gradient $\mathbf{g}$, the Hessian diagonal vector $\mathbf{d}$, and the Hessian constant $c$.  It is derived from equation~\eqref{eq:invert_hessian}.
+
+\section{The Dirichlet-Multinomial Solution}
+
+The technique for the fast Dirichlet multinomial solution starts along the same lines.  Again, the data is an $N$ x $K$ matrix, except now each entry is a count, representing the number of times that category has been seen while sampling that row.  Typically some rows will have more samples than others.  If a row has all zeros, no data was gathered from this sample, and it will not affect the estimate of the Dirichlet.
+
+Start with the probability of seeing the data matrix $D$ given a set of alphas.
+\begin{equation}
+P(D|\alpha)= \prod_{n=0}^{N-1}\prod_{k=0}^{K-1}\Gamma\left(\alpha_k,d_{n,k}\right)\Gamma\left(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k}\right)^{-1} \Gamma\left(1,\sum_{k=0}^{K-1}d_{n,k}\right)\prod_{k=0}^{K-1}\Gamma\left(1,d_{n,k}\right)^{-1}
+\end{equation}
+
+In order to maximize this, first take the log.
+\begin{equation}
+\ln(P(D|\alpha))= \sum_{n=0}^{N-1}(\sum_{k=0}^{K-1}L\Gamma(\alpha_k,d_{n,k}) -L\Gamma(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k})+ L\Gamma(1,\sum_{k=0}^{K-1}d_{n,k})-\sum_{k=0}^{K-1}L\Gamma(1,d_{n,k}))
+\end{equation}
+
+The last two terms are constant with respect to $\alpha$ and can be omitted in the maximization function.
+\begin{equation} \label{eq:original_dmf}
+F(\alpha)=\sum_{n=0}^{N-1}\sum_{k=0}^{K-1}L\Gamma(\alpha_k,d_{n,k})-
+\sum_{n=0}^{N-1}L\Gamma(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k})
+\end{equation}
+
+Unfortunately, the computation of $F$ requires a full read through the data matrix.  Because the probability distribution is not in exponential form, there cannot be a sufficient statistic of constant dimension.\cite[pg 116]{robert}  Even so, we can do much better by using the formulas for the dual-input log gamma function and rearranging the terms.
+\begin{equation} \label{eq:fulldmf}
+F(\alpha)= \sum_{n=0}^{N-1}\sum_{k=0}^{K-1}\sum_{i=0}^{d_{n,k}-1}\ln\left(\alpha_k+i\right)-
+\sum_{n=0}^{N-1}\sum_{i=0}^{\Sigma_kd_{n,k}-1}\ln\left(\sum_{k=0}^{K-1}\alpha_k+i\right)
+\end{equation}
+All of the terms in equation~\eqref{eq:fulldmf} have a similar form.  In the first summation block, they each involve the log of an alpha plus a count.  In the second block, it’s the sum of the alphas plus a count.  Some of these will be seen more than once, so it’s natural to collect the terms.  Let $M$ be the highest possible value of the index $i$, which will be equal to the highest row total.
+\[M = \max_n\Sigma_kd_{n,k}\]
+
+We can simplify the formula for $F$ by constructing an $M$-dimensional vector $\mathbf{v}$, and a $K$ x $M$ dimensional matrix, $U$.  Let $u_{k,m}$ index the matrix $U$, and $v_m$ index the vector $\mathbf{v}$.
+\begin{equation} \label{eq:finaldmf}
+F(\alpha)=\sum_{k=0}^{K-1}\sum_{m=0}^{M-1}u_{k,m}\ln(\alpha_k+m)-
+\sum_{m=0}^{M-1}v_m\ln(\Sigma_k\alpha_k+m)
+\end{equation}
+
+There is an intuitive meaning to the matrix $U$ and vector $\mathbf{v}$.  The value $u_{k,m}$ represents the number of rows in the data where the count in column $k$ exceeds $m$.  The value $v_m$ represents the number of rows in the data where the total sample in the row exceeds $m$.  
+\[
+\begin{array}{cc} u_{k,m}=\sum_{n=0}^{N-1}\mathbb{I}_{d_{n,k} > m} & v_m=\sum_{n=0}^{N-1}\mathbb{I}_{\sum_{k=0}^{K-1}d_{n,k} > m}
+\end{array}
+\]
+\begin{algorithm}
+  \caption{Algorithm for computing $U$ and $\mathbf{v}$}
+  \begin{algorithmic}
+  \State $U \leftarrow 0$
+  \For  {$k=0$ to $K-1$}  \State $v_k \leftarrow 0$ \EndFor
+  \For  {$m=0$ to $M-1$}  
+    \State $C \leftarrow 0$
+    \For {$k=0$ to $K-1$}
+      \State $C \leftarrow c + D[m][k]$      
+      \For {$i=0$ to $D[m][k]$}
+        \State $U[k][i] \leftarrow U[k][i] + 1$      
+      \EndFor
+    \EndFor
+    \For {$i=0$ to $C$}
+      \State $v[i] \leftarrow v[i] + 1$      
+    \EndFor
+  \EndFor
+  \end{algorithmic}
+  \label{alg:uv}
+\end{algorithm}
+Algorithm~\ref{alg:uv} takes care of the key pre-computation. We can again look to find the gradient and Hessian of F.  The formula for the gradient is as follows:
+\begin{equation}
+g_k= \sum_{m=0}^{M-1}u_{k,m}(\alpha_k+m)^{-1}-
+\sum_{m=0}^{M-1}v_m(\Sigma_k\alpha_k+m)^{-1}
+\end{equation}
+Again, the Hessian matrix is a constant plus a diagonal.  Algorithm~\ref{alg:step} can be applied to the results to perform an iteration.
+\begin{equation}
+h_{i,j}=\sum_{m=0}^{M-1}v_m(\Sigma_k\alpha_k+m)^{-2}-
+\sum_{m=0}^{M-1}u_{i,m}(\alpha_i+m)^{-2}\mathbb{I}_{i,j}
+\end{equation}
+\section{Theoretical Runtime Analysis}
+In this section, we derive the order of magnitude of the running time for the proposed algorithm, and compare it to the Minka's version.
+\subsection{Minka's Algorithm}
+If the function $F$ were calculated from the summations in equation~\eqref{eq:fulldmf}, then the running time would be $O(MNK)$.  However, there exists algorithms for the log-gamma, digamma, and trigamma functions which are more efficient than simply adding up the logarithmic terms\cite{wallach}. We assume that these can be run in constant time.  From the the double summation in equation~\eqref{eq:original_dmf}, the running time becomes $O(NK)$, or the size of the data set.
+
+If the $F$ can be computed in $O(NK)$, so can the gradient and the Hessian components needed to run algorithm~\ref{alg:uv}. If the total number of Newton steps needed to find the MLE within a given precision is $s$, the final running time is $O(sNK)$.
+\subsection{Proposed Algorithm}
+
+Algorithm~\ref{alg:uv} describes the initial sweep through the dataset to calculate $U$ and $\mathbf{v}$.  This will have a running time of $O(MNK)$.
+For the maximization function, we are now looking at equation~\ref{eq:finaldmf}.  The calculation of this function is $O(MK)$ and therefore so is the calculation of the gradient, the Hessian, and the entire Newton-Raphson step from algorithm~\ref{alg:uv}.
+
+Again assuming that we require $s$ steps in Newton's Method, the running time for that phase of the calculation will be of $O(sMK)$.
+Putting it together, the the calculation of Newton's method plus the precomputation of $U$ and $\mathbf{v}$ is $O(NMK + sMK)$ or $O((N+s)MK)$.
+
+If $s$ is an order of magnitude lower than $N$, then the bottleneck is reading in the data, which makes the running time effectively $O(NMK)$.\footnote{Fortunately, $U$ and $\mathbf{v}$ are additive, so this processes can be parallelized across multiple processors in map-reduce job. More about this in the future work section.} When the Newton updates are the bottleneck, the algorithm will have a running time of $O(sMK)$.  In that case, the proposed algorithm does not have a running-time benefit over Minka's version.
+
+\section{Running Time Experiments}
+The evaluation of the proposed algorithm uses the Fastfit library\footnote{http://research.microsoft.com/en-us/um/people/minka/software/fastfit/}, written by Thomas Minka at Microsoft Research\cite{minka}.  Fastfit is a Matlab toolbox and contains two functions for evaluating a Dirichlet-multinomial. A third function based on the proposed algorithm was written in order to compare running times on the same platform (See section \ref{code}).  The initialization and stopping criteria were left untouched in order to make a fair comparison\footnote{This implementation stops when the absolute value of the gradient is less than $10^{-16}$}.
+
+According to the runtime analysis, the proposed algorithm will perform very well when M is small and N grows large.  Samples were generated with a 3-dimensional Dirichlet parameter $[3,1,2]$, and a constant $M = 10$.  The value for $N$ starts at a $100$ and doubles on each round.
+
+This analysis also includes Minka's fixed-point (FP) solution and a new Matlab version using $U$ and $\mathbf{v}$.  The fixed-point algorithm in Fastfit is given as follows:
+\begin{equation}
+\alpha_k^{*}= \alpha_k\frac{\sum_{n=0}^{N-1}\Psi(d_{n,k}+\alpha_k)-\Psi(\alpha_k)}{\sum_{n=0}^{N-1}\Psi(\sum_{k=0}^{K-1}d_{n,k}+\alpha_k)-\Psi(\sum_{k=0}^{K-1}\alpha_k)}
+\end{equation}
+
+The proposed version makes use of the parameters $U$ and $\mathbf{v}$ and has the advantage of not having to run through the dataset multiple times.
+\begin{equation}
+\alpha_k^{*}= \alpha_k\frac{\sum_{m=0}^{M-1}u_{k,m}(\alpha_k+m)^{-1}}{\sum_{m=0}^{M-1}v_m(\sum_{k=0}^{K-1}\alpha_k+m)^{-1}}
+\end{equation}
+
+This is equivalent to Wallach's algorithm using the digamma recurrence relation\cite{wallach}. The Fastfit fixed-point algorithm has an advantage over the Fastfit Newton algorithm because the bottleneck is reading the data on each iteration, and Newton's method requires more computations per data point.  While Newton's method requires computation of both the gradient and the Hessian, the fixed point algorithm needs only the terms from the gradient.  With the precalculation of $U$ and $\mathbf{v}$, that advantage for fixed-point iteration becomes less important.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{loglogaxis}[
+xlabel=N,
+ylabel=time (seconds),
+legend style={
+cells={anchor=east},
+legend pos= north west,
+}]
+
+\addplot coordinates {
+(100,0.3414)
+(200,0.49696)
+(400,0.81785)
+(800,1.6474)
+(1600,3.5246)
+(3200,7.6819)
+(6400,13.5708)
+(12800,25.0067)
+(25600,40.2966)
+(51200,99.487)
+(102400,240.9979)
+};
+\addlegendentry{FastFit}
+
+
+\addplot coordinates {
+(100,0.090174)
+(200,0.094939)
+(400,0.16981)
+(800,0.18266)
+(1600,0.31075)
+(3200,0.58193)
+(6400,1.2623)
+(12800,2.7547)
+(25600,4.7415)
+(51200,10.047)
+(102400,22.3356)
+(204800,44.2398)
+(409600,81.0067)
+(819200,162.5518)
+(1638400,379.775)
+(3276800,822.923)
+(6553600,1658.4084)
+};
+\addlegendentry{FP}
+
+
+\addplot coordinates {
+(100,0.006598)
+(200,0.005703)
+(400,0.004562)
+(800,0.004662)
+(1600,0.006295)
+(3200,0.009634)
+(6400,0.016019)
+(12800,0.028998)
+(25600,0.055058)
+(51200,0.10605)
+(102400,0.21035)
+(204800,0.41523)
+(409600,0.83691)
+(819200,1.6634)
+(1638400,3.4372)
+(3276800,6.9482)
+(6553600,13.9044)
+(13107200,27.7929)
+};
+\addlegendentry{Proposal}
+
+\addplot coordinates {
+(100,0.021078)
+(200,0.015583)
+(400,0.025232)
+(800,0.011562)
+(1600,0.013674)
+(3200,0.016818)
+(6400,0.023057)
+(12800,0.035835)
+(25600,0.06255)
+(51200,0.14943)
+(102400,0.21851)
+(204800,0.43566)
+(409600,0.84666)
+(819200,1.6761)
+(1638400,3.4277)
+(3276800,6.9522)
+(6553600,14.1749)
+(13107200,28.0573)
+};
+\addlegendentry{Wallach}
+
+\end{loglogaxis}
+\end{tikzpicture}
+\end{center}
+
+The running time for increasing $N$ on the proposed algorithm is hinge-shaped; there is a section where it is constant, and a section where it is increasing linearly.  This is in agreement with the running time $O(NK+ sMK)$.  The constant section is dominated by the term $O(sMK)$, and the linear section by the term $O(NK)$.  While any MLE algorithm which reads all of the data has to be at least linear time for increasing $N$, the proposed algorithm reduces running time by a constant factor of over $1000$ in this case.  For high $N$, Algorithm~\ref{alg:uv} dominates the running time for both the propsed algorithm and Wallach's algorithm.
+
+Since the proposed algorithm divides into two parts, the next graph compares the time for precomputation with the time for executing Newton-Raphson.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{loglogaxis}[
+xlabel=N,
+ylabel=time (seconds),
+legend style={
+cells={anchor=east},
+legend pos= north west,
+}]
+
+\addplot coordinates {
+(200,0.000449)
+(400,0.000846)
+(800,0.001632)
+(1600,0.003222)
+(3200,0.006382)
+(6400,0.012776)
+(12800,0.025522)
+(25600,0.051014)
+(51200,0.10199)
+(102400,0.21952)
+(204800,0.40879)
+(409600,0.81845)
+(819200,1.6373)
+(1638400,3.2788)
+(3276800,6.5526)
+(6553600,13.0938)
+(13107200,26.2593)
+(26214400,52.569)
+};
+\addlegendentry{Precomputation}
+
+\addplot coordinates {
+(200,0.004302)
+(400,0.003408)
+(800,0.002818)
+(1600,0.00277)
+(3200,0.002773)
+(6400,0.002798)
+(12800,0.002803)
+(25600,0.002792)
+(51200,0.002824)
+(102400,0.002881)
+(204800,0.003033)
+(409600,0.003293)
+(819200,0.003069)
+(1638400,0.003064)
+(3276800,0.002816)
+(6553600,0.003071)
+(13107200,0.003051)
+(26214400,0.003048)
+};
+\addlegendentry{N-R Learning}
+
+\end{loglogaxis}
+\end{tikzpicture}
+\end{center}
+
+The running time for the Newton-Raphson phrase becomes negligible with respect to the precomputation for large enough $N$.  Suppose that one wanted to find the current estimate after every 1000 rows we add to $U$ and $\mathbf{v}$.  This would not add significant overhead and would allow for an implicit online learning mode where increasingly accurate intermediate answers are produced as the data is processed.
+
+\subsection{Limitations of the Proposed Algorithm}
+
+When $M$ is large and $N$ is held constant, the proposed algorithm is not expected to run as well.  Here the same Dirichlet parameter was used to generate the dataset and $N$ was held constant at $5000$.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{loglogaxis}[
+xlabel=M,
+ylabel=time (seconds),
+legend style={
+cells={anchor=east},
+legend pos= south east,
+}]
+
+\addplot coordinates {
+(2,14.6338)
+(4,10.5691)
+(8,9.6943)
+(16,9.703)
+(32,8.7648)
+(64,9.6872)
+(128,7.9455)
+(256,8.0075)
+(512,6.963)
+(1024,8.2081)
+(2048,8.1749)
+(4096,10.5937)
+(8192,9.224)
+(16384,7.904)
+(32768,7.298)
+(65536,9.1676)
+(131072,8.2438)
+(262144,6.4546)
+(524288,8.2083)
+};
+\addlegendentry{FastFit}
+
+\addplot coordinates {
+(2,3.0017)
+(4,1.3149)
+(8,1.0411)
+(16,0.80595)
+(32,0.76357)
+(64,0.73871)
+(128,0.76202)
+(256,0.74796)
+(512,0.6122)
+(1024,0.71341)
+(2048,0.89982)
+(4096,1.0698)
+(8192,0.97032)
+(16384,1.1267)
+(32768,1.257)
+(65536,1.3945)
+(131072,1.4157)
+(262144,1.2933)
+(524288,1.566)
+};
+\addlegendentry{FP}
+
+
+\addplot coordinates {
+(2,0.003906)
+(4,0.003111)
+(8,0.002756)
+(16,0.003105)
+(32,0.003444)
+(64,0.003971)
+(128,0.00595)
+(256,0.010098)
+(512,0.018293)
+(1024,0.024934)
+(2048,0.058078)
+(4096,0.11392)
+(8192,0.22557)
+(16384,0.5189)
+(32768,1.0365)
+(65536,1.7795)
+(131072,5.8501)
+(262144,8.6833)
+(524288,18.9347)
+};
+\addlegendentry{Proposal}
+
+\addplot coordinates {
+(2,0.047773)
+(4,0.020642)
+(8,0.020269)
+(16,0.023927)
+(32,0.035622)
+(64,0.06036)
+(128,0.10852)
+(256,0.20847)
+(512,0.40054)
+(1024,0.79939)
+(2048,1.6139)
+(4096,3.215)
+(8192,6.4269)
+(16384,12.947)
+(32768,26.0436)
+(65536,52.1553)
+(131072,104.3907)
+(262144,209.6472)
+(524288,424.8351)
+};
+\addlegendentry{Wallach}
+
+\end{loglogaxis}
+\end{tikzpicture}
+\end{center}
+
+While eventually the proposed algorithm performs worse than the Fastfit version, this only occurs when $M$ is close to $10,000$.  In many circumstances, it is not neccesary to have this many samples per row.  If the multinomial for that row is already known with such high precision, it might make sense to use the fast Dirichlet solution (section \ref{fastdirichlet}) or subsample the rows to a reasonable size.  Note that as $N$ increases, the lines will cross at higher and higher values of $M$.
+
+The next graph shows the difference between the two phases with ever increasing $M$.  Since the matrix $U$ has $M$ columns, the Newton-Raphson step can no longer remain constant.  However, it still settles at around $80\%$ the speed of the precomputation step.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{loglogaxis}[
+xlabel=M,
+ylabel=time (seconds),
+legend style={
+cells={anchor=east},
+legend pos= north west,
+}]
+
+
+\addplot coordinates {
+(4,0.001127)
+(8,0.001723)
+(16,0.002921)
+(32,0.005306)
+(64,0.010026)
+(128,0.019507)
+(256,0.038626)
+(512,0.076808)
+(1024,0.15338)
+(2048,0.30605)
+(4096,0.61295)
+(8192,1.2249)
+(16384,2.4548)
+(32768,4.9129)
+(65536,9.9213)
+(131072,19.6542)
+(262144,39.4747)
+(524288,79.2815)
+(1048576,159.1461)
+};
+\addlegendentry{Precomputation}
+
+\addplot coordinates {
+(4,0.004161)
+(8,0.003213)
+(16,0.003392)
+(32,0.002902)
+(64,0.003728)
+(128,0.005545)
+(256,0.009336)
+(512,0.021624)
+(1024,0.023384)
+(2048,0.05344)
+(4096,0.13907)
+(8192,0.24325)
+(16384,0.4186)
+(32768,0.8884)
+(65536,1.6551)
+(131072,5.4275)
+(262144,9.8792)
+(524288,21.8791)
+(1048576,26.8208)
+};
+\addlegendentry{N-R Learning}
+
+\end{loglogaxis}
+\end{tikzpicture}
+\end{center}
+
+Finally, the algorithms were tested with different values for $K$, the number of categories.  The constants were set at $M=50$, $N=5000$, and $\alpha_k = 1/K$.  The benefits of the proposed algorithm are evident through $2048$ dimensions. The negative results for very high $K$ contradict our running-time analysis, and may be caused by issues related to memory allocation and the internal data structures.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{loglogaxis}[
+xlabel=K,
+ylabel=time (seconds),
+legend style={
+cells={anchor=east},
+legend pos= south east,
+}]
+
+
+\addplot coordinates {
+(2,9.9911)
+(4,11.194)
+(8,7.1935)
+(16,6.626)
+(32,7.6864)
+(64,7.9553)
+(128,7.3629)
+(256,10.2227)
+(512,12.9409)
+(1024,16.2093)
+(2048,26.9865)
+(4096,51.8192)
+(8192,88.6905)
+(16384,135.7325)
+(32768,223.4621)
+(65536,330.6516)
+(131072,359.802)
+};
+\addlegendentry{FastFit}
+
+\addplot coordinates {
+(2,0.19834)
+(4,0.12788)
+(8,0.10109)
+(16,0.085152)
+(32,0.086065)
+(64,0.096672)
+(128,0.11937)
+(256,0.15921)
+(512,0.22328)
+(1024,0.66705)
+(2048,2.3781)
+(4096,4.9361)
+(8192,10.7462)
+(16384,21.4049)
+(32768,42.1389)
+(65536,83.5834)
+(131072,165.2163)
+};
+\addlegendentry{FP}
+
+\addplot coordinates {
+(2,0.018433)
+(4,0.005211)
+(8,0.003981)
+(16,0.004149)
+(32,0.006524)
+(64,0.010139)
+(128,0.017307)
+(256,0.034532)
+(512,0.074105)
+(1024,0.028119)
+(2048,0.050693)
+(4096,51.5911)
+(8192,89.7038)
+(16384,134.1459)
+(32768,233.0731)
+(65536,333.6214)
+(131072,361.4261)
+};
+\addlegendentry{Proposal}
+
+\addplot coordinates {
+(2,0.05176)
+(4,0.043032)
+(8,0.044532)
+(16,0.047116)
+(32,0.052131)
+(64,0.063602)
+(128,0.093282)
+(256,0.15052)
+(512,0.27418)
+(1024,0.63972)
+(2048,1.2835)
+(4096,10.8125)
+(8192,22.4796)
+(16384,53.9609)
+(32768,111.5116)
+(65536,265.1683)
+(131072,533.0268)
+};
+\addlegendentry{Wallach}
+
+\end{loglogaxis}
+\end{tikzpicture}
+\end{center}
+
+\section{Conclusions}
+
+Theoretical analysis and experiments suggest that the proposed Newton-Raphson algorithm for computing the MLE for a Dirichlet multinomial has improved running times over typical implementations where $M$ is small and $N$ is large.
+
+The proposal also provides a separation between the precomputation step and the Newton-Raphson algorithm.  In the precomputation step, the results from each row can be added independently and therefore it is easy to parellelize, stop early, or add more data.  The Newton-Raphson step, not having to read the entire dataset, runs in constant time as the number of rows increases.
+
+\subsection{Future Work}
+
+In many Dirichlet multinomial datasets, the amount of data in each row follows a power law distribution.  In other words, a small number of rows contain a large number of samples, and a large number of rows (the \textit{long tail}) contain a small number of samples.  There are two possibilities for handling this case.
+
+First, if the highly sampled rows could be subsampled, the value of $M$ would decrease and the proposed algorithm would run faster. Some analysis would have to be done on exactly how valuable that data is with respect to the MLE for the Dirichlet, but intuitively that would be the least valuable data to sample away.
+
+Another possibility is to pick a desired value for $M$ and split the dataset into two parts.  The first part contains all the rows that have more than $M$ samples, and the second will be used to compute $U$ and $\mathbf{v}$.  Both of these datasets will be far smaller than the original.  Minka's technique will be applied to the first set to find the gradient and Hessian, and the proposed technique will be used for the second set with the results added together.  This hybrid approach would perform better than either of the two approaches independently. The value for $M$ may not even need to be predetermined. A data structure could keep track of free rows, $U$ and $\mathbf{v}$.  This data structure would accept new rows and only go back and subsume those rows into $U$ and $\mathbf{v}$ when it shrinks the size of the representation.
+
+Another application of this technique is to use it to compute mixture models, which are far more powerful than a single Dirichlet multinomial model.  In a simple mixture model it is assumed that each row in the dataset was produced by a multinomial coming from a single Dirichlet model in the mixture.  Such a model could favor Dirichlets with high weights so that it looks like a fuzzier version of the multinomial mixture model.  The Latent Dirichlet Allocation is more complex, since different points in each row could be produced by different distributions.  The proposed algorithm, along with the expectation-maximization algorithm, could be used to build these.
+
+Finally, a parallelized map-reduce version of algorithm~\ref{alg:uv} (the precomputation) can be built.  For accurately estimating a Dirichlet multinomial, a large dataset is overkill.  But suppose that a mixture model is being computed with many Dirichlet clusters to choose from over a sharded dataset.  In this case, a parellelized version of algorithm~\ref{alg:uv}  becomes far more important.
+
+\subsection{The Code}
+\label{code}
+
+Two implementations for the MLE estimate of the Dirichlet-multinomial have been developed: a Python version and a Matlab version.  The main implementation is in Python.  A Dirichlet MLE estimate relies on NumPy, but the Dirichlet-Multinomial uses only functions from the math package. This could be found in github in both an actively developed repository\footnote{https://github.com/maxsklar/BayesPy/tree/master/ConjugatePriorTools} and a repository specifically for this paper that will not change much except for corrections or to make it more relevant to this paper\footnote{https://github.com/maxsklar/research/tree/master/2014\_05\_Dirichlet/python}. An implementation in Matlab which extends the FastFit library was developed for the experiments and is kept in the same repository\footnote{https://github.com/maxsklar/research/tree/master/2014\_05\_Dirichlet/matlab}.
+
+%\subsubsection*{References}
+
+\begin{thebibliography}{20}
+
+\bibitem{blei}Blei, D. M., Ng, A. Y., \& Jordan, M. I. (2003). Latent dirichlet allocation. the Journal of machine Learning research, 3, 993-1022.
+
+\bibitem{dishon}Dishon, M., \& Weiss, G. H. (1980). Small sample comparison of estimation methods for the beta distribution. Journal of Statistical Computation and Simulation, 11(1), 1-11.
+
+\bibitem{hariharan}Hariharan, H. S., \& Velu, R. P. (1993). On estimating dirichlet parameters—a comparison of initial values. Journal of statistical computation and simulation, 48(1-2), 47-58.
+
+\bibitem{heinrich}Heinrich, G. (2005). Parameter estimation for text analysis. Web: http://www. arbylon. net/publications/text-est. pdf.
+
+\bibitem{hijazi}Hijazi, R. H., \& Jernigan, R. W. (2009). Modelling compositional data using Dirichlet regression models. Journal of Applied Probability \& Statistics, 4, 77-91.
+
+\bibitem{minka}Minka, T. (2000). Estimating a Dirichlet distribution. Technical report, M.I.T., 2000.
+
+\bibitem{narayanan}Narayanan, A. (1991). Algorithm AS 266: maximum likelihood estimation of the parameters of the Dirichlet distribution. Journal of the Royal Statistical Society. Series C (Applied Statistics), 40(2), 365-374.
+
+\bibitem{ng}Ng, K. W., Tian, G. L., \& Tang, M. L. (2011). Dirichlet and Related Distributions: Theory, Methods and Applications (Vol. 888). John Wiley \& Sons.
+
+\bibitem{mosimann}Mosimann, J. E. (1962). On the compound multinomial distribution, the multivariate β-distribution, and correlations among proportions. Biometrika, 49(1-2), 65-82.
+
+\bibitem{robert}Robert, C. (2007). The Bayesian choice: from decision-theoretic foundations to computational implementation. Springer.
+
+\bibitem{ronning}Ronning, G. (1989). Maximum likelihood estimation of Dirichlet distributions. Journal of statistical computation and simulation, 32(4), 215-221.
+
+\bibitem{sklar}Sklar, M., Shaw, B., \& Hogue, A. (2012, September). Recommending interesting events in real-time with foursquare check-ins. In Proceedings of the sixth ACM conference on Recommender systems (pp. 311-312). ACM.
+
+\bibitem{wallach}Wallach, H. M. (2008). Structured topic models for language. Unpublished doctoral dissertation, Univ. of Cambridge.
+
+\bibitem{wicker}Wicker, N., Muller, J., Kalathur, R. K. R., \& Poch, O. (2008). A maximum likelihood approximation method for Dirichlet's parameter estimation. Computational Statistics \& Data Analysis, 52(3), 1315-1322.
+
+\bibitem{woodbury}Woodbury, M. A. (1950). Inverting modified matrices. Memorandum report, 42, 106.
+
+\end{thebibliography}
+\end{document}
