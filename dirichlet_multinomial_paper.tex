@@ -40,7 +40,7 @@ Given a collection of categorical data, we want to find the parameters of a Diri
 
 \section{Introduction}
 
-The Dirichlet distribution has long been used as a conjugate prior for the multinomial distribution, giving statisticians access to analytically tractible priors. Since the Dirichlet is so central to Bayesian statistics, it is important to have a simple computation to estimate its parameters. Here we consider the maximum likelihood estimate.
+The Dirichlet distribution has long been used as a conjugate prior for the multinomial distribution, giving statisticians access to analytically tractable priors. Since the Dirichlet is so central to Bayesian statistics, it is important to have a simple computation to estimate its parameters. Here we consider the maximum likelihood estimate.
 
 \subsection{Motivation}
 
@@ -58,7 +58,7 @@ Dirichlet distributions are also widely used in topic models for Natural Languag
 
 \subsection{Previous Work}
 
-In 1989, Gerd Ronning published a paper on estimating a Dirichlet from a set of multinomial-valued samples\cite{ronning}.  This paper contains a proof that the objective function is globally concave and therefore the Newton-Raphson method will converge to a solution \cite[pg 73]{ng}.  In 1990, Narayanan published a paper on the MLE computation of the Dirichlet including an implementation in Fortran\cite{narayanan}. He cites various examples of Dirichlet distributions being used for statistical models going back to the 1960s and 1970s, including Mosiman's work on serum protiens in white Pekan ducklings\cite[pg 8]{ng}.
+In 1989, Gerd Ronning published a paper on estimating a Dirichlet from a set of multinomial-valued samples\cite{ronning}.  This paper contains a proof that the objective function is globally concave and therefore the Newton-Raphson method will converge to a solution \cite[pg 73]{ng}.  In 1990, Narayanan published a paper on the MLE computation of the Dirichlet including an implementation in Fortran\cite{narayanan}. He cites various examples of Dirichlet distributions being used for statistical models going back to the 1960s and 1970s, including Mosiman's work on serum proteins in white Pekan ducklings\cite[pg 8]{ng}.
 
 In 2000, Thomas Minka\cite{minka} wrote about the MLE for Dirichlet distributions, and later wrote an implementation in Matlab.
 
@@ -303,9 +303,9 @@ h_{i,j}=\sum_{m=0}^{M-1}v_m(\Sigma_k\alpha_k+m)^{-2}-
 \sum_{m=0}^{M-1}u_{i,m}(\alpha_i+m)^{-2}\mathbb{I}_{i,j}
 \end{equation}
 \section{Theoretical Runtime Analysis}
-In this section, we derive the order of magnitude of the running time for the proposed algorithm, and compare it to the Minka's version.
+In this section, we derive the order of magnitude of the running time for the proposed algorithm, and compare it to Minka's version.
 \subsection{Minka's Algorithm}
-If the function $F$ were calculated from the summations in equation~\eqref{eq:fulldmf}, then the running time would be $O(MNK)$.  However, there exists algorithms for the log-gamma, digamma, and trigamma functions which are more efficient than simply adding up the logarithmic terms\cite{wallach}. We assume that these can be run in constant time.  From the the double summation in equation~\eqref{eq:original_dmf}, the running time becomes $O(NK)$, or the size of the data set.
+If the function $F$ were calculated from the summations in equation~\eqref{eq:fulldmf}, then the running time would be $O(MNK)$.  However, there exists algorithms for the log-gamma, digamma, and trigamma functions which are more efficient than simply adding up the logarithmic terms\cite{wallach}. We assume that these can be run in constant time.  From the double summation in equation~\eqref{eq:original_dmf}, the running time becomes $O(NK)$, or the size of the data set.
 
 If the $F$ can be computed in $O(NK)$, so can the gradient and the Hessian components needed to run algorithm~\ref{alg:uv}. If the total number of Newton steps needed to find the MLE within a given precision is $s$, the final running time is $O(sNK)$.
 \subsection{Proposed Algorithm}
@@ -314,14 +314,14 @@ Algorithm~\ref{alg:uv} describes the initial sweep through the dataset to calcul
 For the maximization function, we are now looking at equation~\ref{eq:finaldmf}.  The calculation of this function is $O(MK)$ and therefore so is the calculation of the gradient, the Hessian, and the entire Newton-Raphson step from algorithm~\ref{alg:uv}.
 
 Again assuming that we require $s$ steps in Newton's Method, the running time for that phase of the calculation will be of $O(sMK)$.
-Putting it together, the the calculation of Newton's method plus the precomputation of $U$ and $\mathbf{v}$ is $O(NMK + sMK)$ or $O((N+s)MK)$.
+Putting it together, the calculation of Newton's method plus the precomputation of $U$ and $\mathbf{v}$ is $O(NMK + sMK)$ or $O((N+s)MK)$.
 
 If $s$ is an order of magnitude lower than $N$, then the bottleneck is reading in the data, which makes the running time effectively $O(NMK)$.\footnote{Fortunately, $U$ and $\mathbf{v}$ are additive, so this processes can be parallelized across multiple processors in map-reduce job. More about this in the future work section.} When the Newton updates are the bottleneck, the algorithm will have a running time of $O(sMK)$.  In that case, the proposed algorithm does not have a running-time benefit over Minka's version.
 
 \section{Running Time Experiments}
 The evaluation of the proposed algorithm uses the Fastfit library\footnote{http://research.microsoft.com/en-us/um/people/minka/software/fastfit/}, written by Thomas Minka at Microsoft Research\cite{minka}.  Fastfit is a Matlab toolbox and contains two functions for evaluating a Dirichlet-multinomial. A third function based on the proposed algorithm was written in order to compare running times on the same platform (See section \ref{code}).  The initialization and stopping criteria were left untouched in order to make a fair comparison\footnote{This implementation stops when the absolute value of the gradient is less than $10^{-16}$}.
 
-According to the runtime analysis, the proposed algorithm will perform very well when M is small and N grows large.  Samples were generated with a 3-dimensional Dirichlet parameter $[3,1,2]$, and a constant $M = 10$.  The value for $N$ starts at a $100$ and doubles on each round.
+According to the runtime analysis, the proposed algorithm will perform very well when M is small and N grows large.  Samples were generated with a 3-dimensional Dirichlet parameter $[3,1,2]$, and a constant $M = 10$.  The value for $N$ starts at $100$ and doubles on each round.
 
 This analysis also includes Minka's fixed-point (FP) solution and a new Matlab version using $U$ and $\mathbf{v}$.  The fixed-point algorithm in Fastfit is given as follows:
 \begin{equation}
@@ -431,7 +431,7 @@ legend pos= north west,
 \end{tikzpicture}
 \end{center}
 
-The running time for increasing $N$ on the proposed algorithm is hinge-shaped; there is a section where it is constant, and a section where it is increasing linearly.  This is in agreement with the running time $O(NK+ sMK)$.  The constant section is dominated by the term $O(sMK)$, and the linear section by the term $O(NK)$.  While any MLE algorithm which reads all of the data has to be at least linear time for increasing $N$, the proposed algorithm reduces running time by a constant factor of over $1000$ in this case.  For high $N$, Algorithm~\ref{alg:uv} dominates the running time for both the propsed algorithm and Wallach's algorithm.
+The running time for increasing $N$ on the proposed algorithm is hinge-shaped; there is a section where it is constant, and a section where it is increasing linearly.  This is in agreement with the running time $O(NK+ sMK)$.  The constant section is dominated by the term $O(sMK)$, and the linear section by the term $O(NK)$.  While any MLE algorithm which reads all of the data has to be at least linear time for increasing $N$, the proposed algorithm reduces running time by a constant factor of over $1000$ in this case.  For high $N$, Algorithm~\ref{alg:uv} dominates the running time for both the proposed algorithm and Wallach's algorithm.
 
 Since the proposed algorithm divides into two parts, the next graph compares the time for precomputation with the time for executing Newton-Raphson.
 
@@ -815,7 +815,7 @@ Two implementations for the MLE estimate of the Dirichlet-multinomial have been 
 
 \bibitem{ng}Ng, K. W., Tian, G. L., \& Tang, M. L. (2011). Dirichlet and Related Distributions: Theory, Methods and Applications (Vol. 888). John Wiley \& Sons.
 
-\bibitem{mosimann}Mosimann, J. E. (1962). On the compound multinomial distribution, the multivariate β-distribution, and correlations among proportions. Biometrika, 49(1-2), 65-82.
+\bibitem{mosimann}Mosimann, J. E. (1962). On the compound multinomial distribution, the multivariate \(\beta\)-distribution, and correlations among proportions. Biometrika, 49(1-2), 65-82.
 
 \bibitem{robert}Robert, C. (2007). The Bayesian choice: from decision-theoretic foundations to computational implementation. Springer.
 
