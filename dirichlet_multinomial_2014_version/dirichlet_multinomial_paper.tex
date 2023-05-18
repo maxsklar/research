@@ -2,7 +2,7 @@
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{algorithm}
-\usepackage[noend]{algpseudocode}
+\usepackage{algpseudocode}
 \usepackage{pgfplots}
 \usepackage{multicol}
 \usepackage[hmarginratio=1:1,top=32mm,columnsep=20pt]{geometry}
@@ -42,7 +42,7 @@ Given a collection of categorical data, we want to find the parameters of a Diri
 
 \section{Introduction}
 
-The Dirichlet distribution has long been used as a conjugate prior for the multinomial distribution, giving statisticians access to analytically tractable priors. Since the Dirichlet is so central to Bayesian statistics, it is important to have an efficient computation to estimate its parameters. Here we consider the maximum likelihood estimate.
+The Dirichlet distribution has long been used as a conjugate prior for the multinomial distribution, giving statisticians access to analytically tractable priors. Since the Dirichlet is so central to Bayesian statistics, it is important to have a simple computation to estimate its parameters. Here we consider the maximum likelihood estimate.
 
 \subsection{Motivation}
 
@@ -64,7 +64,7 @@ In 1989, Gerd Ronning published a paper on estimating a Dirichlet from a set of 
 
 In 2000, Thomas Minka\cite{minka} wrote about the MLE for Dirichlet distributions, and later wrote an implementation in Matlab.
 
-Much work has also been done in finding an initialization for the Newton-Raphson method \cite[pg 74-54]{ng}.  In 1980, Dishon and Weiss\cite{dishon} proposed using the simple method of moments for the Beta distribution \footnote{the 2-dimensional case of the dirichlet distribution}.  In 1989, Ronning\cite{ronning} produced a new initialization and proved that it was guaranteed to stay within the bounds for the first Newton-Raphson step.  In 2003, Hariharan and Vela\cite{hariharan} proposed a new, simpler, method for initialization.  And finally in 2008, Wicker et al\cite{wicker}, proposed a maximum likelihood approximation method which was shown to work more efficiently with some standard data sets.
+Much work has also been done in finding an initialization for the Newton-Raphson method \cite[pg 74-54]{ng}.  In 1980, Dishon and Weiss\cite{dishon} proposed using the simple method of moments for the Beta distribution \footnote{the 2-dimensional case of the dirichlet distribution}.  In 1989, Ronning\cite{ronning} produced a new initialization and proved that it was guaranteed to stay within the bounds for the first Newton-Raphson step.  In 2003, Hariharan and Vela\cite{hariharan} proposed a new, simpler, method for initialization.  And finally in 2008, Wicker et al\cite{wicker}, proposed a Maximum Likelihood Approximation method which was shown to work more efficiently with some standard data sets.
 
 All of that work assumes direct access to the multinomial distribution, and not from just count data.  Minka\cite{minka} tackles this problem in 2000 and describes the computations for finding the MLE of a Dirichlet multinomial.   His algorithms include the Newton-Raphson method and a fixed-point iteration.  He also includes a Matlab implementation.  In 2008, Hanna Wallach reviews Minka's algorithms, and develops a new fixed-point iteration based on a mathematical transformation of the digamma function leading to a precomputation.  Ng et al\cite{ng} in 2011 also describe the mathematics, and say that ``in general, Newton's method provides the fastest means for finding the MLE''.
 
@@ -80,43 +80,41 @@ The gamma function of a positive integer n is equivalent to n minus 1 factorial:
 
 \[\Gamma(n)=(n-1)!\]
 
-We define the dual-input gamma function of a positive number and a natural number \(n\) as the ratio of the gamma function of \(a + n\) and \(a\). This is also equivalent to the \textit{rising power}\cite{concrete} \(a^{\bar{n}}\).
+For this paper, define the dual-input gamma function of a positive number and a whole number, \(n\).  This function is non-standard, but it is useful because of it’s computational property; it is equivalent to an \(n\)-factor multiplication problem.
 
-\[\Gamma(a,n)=\frac{\Gamma(a+n)}{\Gamma(a)}=\prod_{i=0}^{n-1}(a+i)=a^{\bar{n}}\]
+\[\Gamma(a,n)=\frac{\Gamma(a+n)}{\Gamma(a)}=\prod_{i=0}^{n-1}(a+i)\]
 
-In order to simplify the expressions in this paper, we also introduce the dual-input log-gamma function as equivalent to the log of \(\Gamma(a, n)\)
+The dual-input log-gamma function is equivalent to the log of the previous function, and can be computed as an \(n\)-step addition problem. This function is also not standard, but is defined for the purpose of this paper to make equations simpler and more clear.
 
 \[L\Gamma(a,n)=\sum_{i=0}^{n-1}\ln(a+i)\]
 
-A \textit{\(K\)-dimensional categorical distribution} or \textit{general finite distribution}\cite{ng} is a probability distribution over K mutually exclusive outcomes.  A categorical distribution is represented by a \(K\)-dimensional vector $\mathbf{p}$, where all the values sum to 1.
+A \textit{\(K\)-dimensional multinomial distribution} is a probability distribution over K discrete and mutually exclusive outcomes.  A multinomial distribution is represented by a \(K\)-dimensional vector $\mathbf{p}$, where all the values sum to 1.
 
 \[\sum_{i=0}^{K-1}p_i=1\]
 
-Each sample from a categorical distribution is a member of the set \({0, 1, 2, ..., K-1}\). When this distribution is sampled \(n\) times, the results can be compressed into a  K-dimensional count vector \(\mathbf{c}\), where \(c_k\) is the number of times category \(k\) appears in the data set.  The counts all sum to $n$.
+Suppose that a multinomial distribution is sampled n times.  These \(n\) pieces of data can be compressed into a K-dimensional count vector \(\mathbf{c}\), where \(c_k\) is the number of times category \(k\) appears in the data set.  The counts all sum to $n$.
 
 \[\sum_{k=1}^{K-1}c_k=n\]
 
-The probability distribution over all possible count vectors is called a \(multinomial distribution\), or more precisely in this case, a \(K-dimentional multinomial distribution with n trials\). Given a categorical distribution and \(n\), the resulting multinomial distribution can be computed precisely.
-
 A \textit{\(K\)-dimensional Dirichlet distribution} is a family of probability distributions over the space of K-dimensional multinomial distributions.  It is parameterized by a K-dimensional vector $\alpha$.
 
-\[\mathcal{D}(\mathbf{p},\mathbf{\alpha})=\frac{\prod_{k=0}^{K-1}\Gamma(\alpha_i)}{\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right)}\prod_{k=0}^{K-1}{p_k}^{\alpha_k-1}\]
+\[\mathcal{D}(\mathbf{p},\mathbf{\alpha})=\frac{\prod_{k=0}^{K-1}\Gamma(\alpha_i)}{\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right)}\prod_{k=0}^{K-1}{p_i}^{\alpha_k-1}\]
 
-Suppose that a count vector of \(n\) samples is drawn from an unknown multinomial distribution. If the bayesian prior for this distribution is a Dirichlet, then the posterior is also a Dirichlet. This makes the Dirichlet distribution is a \textit{conjugate prior} for the multinomial distribution.
+The Dirichlet distribution is a \textit{conjugate prior} for the multinomial distribution.  If the Dirichlet distribution represents the prior probability over a multinomial \(\mathbf{p}\), and $n$ samples are drawn from \(\mathbf{p}\) yielding a count vector \(\mathbf{c}\), the posterior distribution is also a Dirichlet.
 
-More specifically, if \(\mathcal{D}(\mathbf{p},\mathbf{\alpha})\) represents our prior probability distribution over distribution vector \(\mathbf{p}\) and \(\mathbf{c}\) is the count vector for the observed sample, then the posterior distribution is  $P(\mathbf{p} | \mathbf{c})=\mathcal{D}(\mathbf{p},\mathbf{\alpha} + \mathbf{c})$. This result is satisfyingly elegant and makes Bayesian inference over the Dirichlet-multinomial far simpler than many would expect.
+If the prior distribution is $P(\mathbf{p})=\mathcal{D}(\mathbf{p},\mathbf{\alpha})$ then the posterior distribution is $P(\mathbf{p} | \mathbf{c})=\mathcal{D}(\mathbf{p},\mathbf{\alpha} + \mathbf{c})$.
 
-The expected value of a Dirichlet distribution is obtained by normalizing the vector $\alpha$.
+The \textit{expected value of a Dirichlet distribution} is equal the vector $\alpha$ normalized.
 
 \[\mathbb{E}(\mathcal{D}(\mathbf{p},\mathbf{\alpha}))=\frac{\mathbf{\alpha}}{\sum_{i=0}^{K-1}\alpha_i}\]
 
-An intuitive notion of the Dirichlet distribution is that each component of $\alpha$ puts some weight on each category before the data is collected. As more samples are obtained, the prior value of $\alpha$ become less and less relevant and the data is allowed to speak for itself.
+An intuitive notion of the Dirichlet distribution is that each $\alpha$ value puts some weight on each category before the data is collected.  As more data is taken into account, the initial $\alpha$ values become less relevant and the data is allowed to speak for itself.
 
 The probability distribution over the possible configurations of a count vector given a Dirichlet distribution is the \textit{Dirichlet-multinomial distribution}.  It is derived as follows:
 \[P(\mathbf{c}|\mathbf{\alpha})=\int_{\mathbf{p}}P(\mathbf{c}|\mathbf{p})P(\mathbf{p}|\mathbf{\alpha})\]
 \[P(\mathbf{c}|\mathbf{\alpha})=
-\frac{\prod_{k=0}^{K-1}\Gamma(\alpha_k,c_k)}{\Gamma\left(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}c_k\right)}
-\frac{\Gamma\left(1,\sum_{k=0}^{K-1}c_k\right)}{\prod_{k=0}^{K-1}\left(\Gamma(1,c_k)\right)}
+\frac{\prod_{i=0}^{K-1}\Gamma(\alpha_i,c_i)}{\Gamma\left(\sum_{i=0}^{K-1}\alpha_i,\sum_{i=0}^{K-1}c_i\right)}
+\frac{\Gamma\left(1,\sum_{i=0}^{K-1}c_i\right)}{\prod_{i=0}^{K-1}\left(\Gamma(1,x_i)\right)}
 \]
 
 Finally, the \textit{maximum likelihood estimate (MLE)} for a parameterized probability distribution are those parameters which maximize the likelihood of the data.
@@ -125,9 +123,9 @@ Finally, the \textit{maximum likelihood estimate (MLE)} for a parameterized prob
 
 \section{Overview of the Problem}
 
-Suppose that $N$ samples are drawn from a Dirichlet distribution, and we want to find the MLE of the Dirichlet parameter $\alpha$.  There are two cases to consider.
+Suppose that $N$ samples are drawn from a Dirichlet distribution, and we want to find the MLE of the parameter $\alpha$.  There are two cases to consider.
 
-In the Dirichlet problem, we know the exact probabilities of the multinomial distribution for each sample. We illustrate this type of dataset in Table~\ref{tab:d}. Each row in the table represents a sample and each column represents a category. Each individual value in the table displays the probability of the corresponding category for the corresponding sample.
+In the Dirichlet problem, there is direct access to the multinomial distribution of each sample.  The data is shown in Table~\ref{tab:d}, where each row is a sample, and each column represents the probability of one of the $K$ categories.
 
 \begin{table}[h] \centering
 \begin{tabular}{ l | l l l | l}
@@ -140,7 +138,7 @@ In the Dirichlet problem, we know the exact probabilities of the multinomial dis
 \caption{Dataset in the Pure Dirichlet Problem}\label{tab:d}
 \end{table}
 
-In the \textit{Dirichlet-multinomial problem}, we cannot directly observe the probabilities associated with each category. Instead, we record a count vector by sampling each row. The data is going to look more like Table~\ref{tab:dm} where each value represents a count rather than a probability.
+In the \textit{Dirichlet-multinomial problem}, the multinomial distributions are not directly observed. Instead, a sample is recorded from each one.  This is far more common in practice, since counts are directly observable.  This dataset still has N rows and K columns, but each value now represents a count rather than a probability.
 
 \begin{table}[h] \centering
 \begin{tabular}{ l | l l l | l}
@@ -160,7 +158,7 @@ The logical improvement is therefore to find an alternative pre-computation on t
 \section{The Fast Dirichlet Solution}
 \label{fastdirichlet}
 
-This is equivalent to the solutions documented by Minka\cite{minka} (2000), Blei\cite[A.4.2]{blei} (2003) and Ng\cite[pg 72-73]{ng} (2011).  The dataset for the Dirichlet problem is an \(N\) x \(K\) matrix $D$ in which each row represents a sample from a single Dirichlet.  Let $d_{n,k}$ represent the nth row and kth column of matrix $D$.  Given a Dirichlet parameter $\alpha$, the probability of the dataset is given as follows:
+This is equivalent to the solution documented by Minka\cite{minka} (2000), Blei\cite[A.4.2]{blei} (2003) and Ng\cite[pg 72-73]{ng} (2011).  The dataset for the Dirichlet problem is an \(N\) x \(K\) matrix $D$ in which each row represents a sample from a single Dirichlet.  Let $d_{n,k}$ represent the nth row and kth column of matrix $D$.  Given a Dirichlet parameter $\alpha$, the probability of the dataset is given as follows:
 \[
 P(D|\alpha)=\prod_{n=0}^{N-1}\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right)\prod_{k=0}^{K-1}\Gamma(\alpha_k)^{-1}d_{n,k}^{\alpha_k-1}
 \]
@@ -177,10 +175,10 @@ In this form, only one term involves the data. This term is called the \textit{s
 
 \[v_k=\frac{1}{N}\sum_{n=0}^{N-1}\ln\left(d_{n,k}\right)\]
 
-The distinction separating the Dirichlet and the Dirichlet multinomial cases is that the Dirichlet case has a sufficient statistic of constant dimension.  In fact, this is true for all families of exponential distributions\cite[pg 116]{robert}.  The function to maximize now looks like this:
+The distinction separating the Dirichlet and the Dirichlet multinomial cases is that the Dirichlet case has a sufficient statistic of constant dimension.  In fact, this is true of all exponential distributions\cite[pg 116]{robert}.  The function to maximize now looks like this:
 
 \[
-F(\alpha)=\ln\Gamma\left(\sum_{k=0}^{K-1}\alpha_k\right)-\sum_{k=0}^{K-1}\ln\Gamma\left(\alpha_k\right)+\sum_{k=0}^{K-1}\alpha_kv_k
+F(\alpha)=\ln\Gamma(\sum_{k=0}^{K-1}\alpha_k)-\sum_{k=0}^{K-1}\ln\Gamma(\alpha_k)+\sum_{k=0}^{K-1}\alpha_kv_k
 \]
 
 In order to use the Newton-Raphson method, we need to compute the gradient vector $\mathbf{g}$ and the Hessian matrix $H$.  The formula for a single step is as follows:
@@ -198,132 +196,111 @@ These functions, along with gamma are available in most numeric libraries.  The 
 
 The gradient is given as follows:
 \[
-g_k=\Psi\left(\sum_{k=0}^{K-1}\alpha_k\right)-\Psi(\alpha_k)+v_k
+g_k=\Psi(\sum_{k=0}^{K-1}\alpha_k)-\Psi(\alpha_k)+v_k
 \]
 
 The Hessian matrix consists of a constant matrix, plus a diagonal.  Let $\mathbb{I}_{i,j}$ be the indicator function that is equal to $1$ if $i = j$ and $0$ otherwise.
 
 \[
-h_{i,j}=\Psi'\left(\sum_{k=0}^{K-1}\alpha_k\right)-\Psi'(\alpha_i)\mathbb{I}_{i,j}
+h_{i,j}=\Psi'(\sum_{k=0}^{K-1}\alpha_k)-\Psi'(\alpha_i)\mathbb{I}_{i,j}
 \]
 
 There is a formula for efficiently inverting this type of matrix, and it is a special case of the matrix inversion lemma\cite{woodbury}.  The technique is also used by Minka\cite{minka} (2000) and Blei\cite[A.2]{blei}(2003) for Dirichlet-based machine learning.  Let the vector representing the diagonal be $\mathbf{d}$, and the scalar constant in the constant matrix be $c$.  The formula computing the inverse Hessian is as follows:
 
-\begin{equation}
+\[
 H=I\mathbf{d} + \mathbf{1}\mathbf{1}^Tc
-\qquad \qquad
+\]
+
+\begin{equation}
 H^{-1}=I\mathbf{d}^{-1}-\frac{\mathbf{d}^{-1}\mathbf{1}\mathbf{1}^T\mathbf{d}^{-1}}{c^{-1}+\sum_{k=0}^{K-1}d_k^{-1}}
 \label{eq:invert_hessian}
 \end{equation}
 
 \begin{algorithm}
   \caption{Algorithm for $1$ Newton Step}
-  \begin{multicols}{2}
   \begin{algorithmic}
-  \Function{Step}{$\mathbf{g} \in \mathbb{R}^{K},\mathbf{d} \in \mathbb{R}^{K},c \in \mathbb{R}$}
+  \Function{Step}{$\alpha,\mathbf{g},\mathbf{d},c$}
+  \State $x_k \leftarrow g_k-\alpha_kd_k$
+  \State $Z \leftarrow 0$
+  \For  {$k=0$ to $K-1$}  \State $Z \leftarrow Z + \alpha_k / x_k$ \EndFor
+  \State $Z \leftarrow Z*c$
   \State $S \leftarrow 0$
-  \For  {$k=0$ to $K-1$}
-    \State $S \leftarrow S + \mathbf{g}[k] / \mathbf{d}[k]$
-  \EndFor
-
-  \State $Z \leftarrow 1/c$
-  \For  {$k=0$ to $K-1$}
-    \State $Z \leftarrow Z + 1 / d_k$
-  \EndFor
-  
-  \State $\delta \in \mathbb{R}^{K}$
-  \For  {$k=0$ to $K-1$}
-    \State $\delta[k] \gets (S/Z - \mathbf{g}[i]) / \mathbf{d}[i]$
-  \EndFor
+  \For  {$k=0$ to $K-1$}  \State $S \leftarrow S + 1/(1+Z)/x_k$ \EndFor
+  \For  {$k=0$ to $K-1$}  \State $\delta_k \leftarrow S + x_k*(1-\mathbf{c}*\alpha_i*S)$ \EndFor
   \State \Return $\delta$
   \EndFunction
   \end{algorithmic}
-  \columnbreak
-  \begin{algorithmic}
-  \Function{StepInLogSpace}{$\alpha \in \mathbb{R}^{K},\mathbf{g},\mathbf{d},c$}
-  \State $x \in \mathbb{R}^{K}$
-  \For  {$k=0$ to $K-1$}
-    \State $x_k \gets \mathbf{g}[k]-\alpha[k] \cdot d[k]$
-  \EndFor
-  \State $Z \gets 0$
-  \For  {$k=0$ to $K-1$}  \State $Z \gets Z + \alpha[k] / x[k]$ \EndFor
-  \State $S \gets 0$
-  \For  {$k=0$ to $K-1$}  \State $S \gets S + 1/(1+Z \cdot c)/x[k]$ \EndFor
-  \State $\delta \in \mathbb{R}^{K}$
-  \For  {$k=0$ to $K-1$}  \State $\delta[k] \gets \mathbf{g}[k] / \mathbf{d}[k] *(1-\mathbf{c}*\alpha[i]*S)$ \EndFor
-  \State \Return $\delta$
-  \EndFunction
-  \end{algorithmic}
-  \end{multicols}
   \label{alg:step}
 \end{algorithm}
 
-Algorithm~\ref{alg:step} computes one Newton step given the gradient $\mathbf{g}$, the Hessian diagonal vector $\mathbf{d}$, and the Hessian constant $c$. It is derived from equation~\eqref{eq:invert_hessian}. The alternative \textbf{StepInLogSpace} does the same computation on the vector \([ln(\alpha_k)]\) to guarantee that all \(\alpha_k\) values remain positive. \textbf{StepInLogSpace} may be slower to converge, but it can be used when the original \textbf{Step} function takes any \(\alpha_k\) into negative territory.
+Algorithm~\ref{alg:step} calculates one Newton step given the gradient $\mathbf{g}$, the Hessian diagonal vector $\mathbf{d}$, and the Hessian constant $c$.  It is derived from equation~\eqref{eq:invert_hessian}.
 
 \section{The Dirichlet-Multinomial Solution}
 
-The technique for the fast Dirichlet multinomial solution is similar. The data is still an $N$ x $K$ matrix, except now each entry is a count, representing the number of times that category has been seen while sampling that row. Typically some rows will have more samples than others.  If a row has all zeros, no data was gathered from this sample, and it will not affect the estimate of the Dirichlet.
+The technique for the fast Dirichlet multinomial solution starts along the same lines.  Again, the data is an $N$ x $K$ matrix, except now each entry is a count, representing the number of times that category has been seen while sampling that row.  Typically some rows will have more samples than others.  If a row has all zeros, no data was gathered from this sample, and it will not affect the estimate of the Dirichlet.
 
-Start with the probability of seeing the data matrix $D$ given Dirichlet distribution \(\alpha\).
+Start with the probability of seeing the data matrix $D$ given a set of alphas.
 \begin{equation}
-P(D|\alpha)= \prod_{n=0}^{N-1}\prod_{k=0}^{K-1}\Gamma\left(\alpha_k,d_{n,k}\right)\cdot\Gamma\left(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k}\right)^{-1}\cdot\Gamma\left(1,\sum_{k=0}^{K-1}d_{n,k}\right)\cdot\prod_{k=0}^{K-1}\Gamma\left(1,d_{n,k}\right)^{-1}
+P(D|\alpha)= \prod_{n=0}^{N-1}\prod_{k=0}^{K-1}\Gamma\left(\alpha_k,d_{n,k}\right)\Gamma\left(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k}\right)^{-1} \Gamma\left(1,\sum_{k=0}^{K-1}d_{n,k}\right)\prod_{k=0}^{K-1}\Gamma\left(1,d_{n,k}\right)^{-1}
 \end{equation}
 
-We now apply the logarithm to simplify the process of maximizing the likelihood.
+In order to maximize this, first take the log.
 \begin{equation}
-\ln(P(D|\alpha))= \sum_{n=0}^{N-1}\left(\sum_{k=0}^{K-1}L\Gamma(\alpha_k,d_{n,k}) -L\Gamma\left(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k}\right)+ L\Gamma\left(1,\sum_{k=0}^{K-1}d_{n,k}\right)-\sum_{k=0}^{K-1}L\Gamma(1,d_{n,k})\right)
+\ln(P(D|\alpha))= \sum_{n=0}^{N-1}(\sum_{k=0}^{K-1}L\Gamma(\alpha_k,d_{n,k}) -L\Gamma(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k})+ L\Gamma(1,\sum_{k=0}^{K-1}d_{n,k})-\sum_{k=0}^{K-1}L\Gamma(1,d_{n,k}))
 \end{equation}
+
 The last two terms are constant with respect to $\alpha$ and can be omitted in the maximization function.
 \begin{equation} \label{eq:original_dmf}
 F(\alpha)=\sum_{n=0}^{N-1}\sum_{k=0}^{K-1}L\Gamma(\alpha_k,d_{n,k})-
-\sum_{n=0}^{N-1}L\Gamma\left(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k}\right)
+\sum_{n=0}^{N-1}L\Gamma(\sum_{k=0}^{K-1}\alpha_k,\sum_{k=0}^{K-1}d_{n,k})
 \end{equation}
-The computation of $F$ requires a full read through the data matrix for every value of \(\alpha\). Because the probability distribution is not in exponential form, there cannot be a sufficient statistic of constant dimension\cite[pg 116]{robert}. Fortunately, a sufficient statistic of variable dimention does exist. We start to find this by expanding the formula for the dual-input \(L\gamma\) and rearranging the terms.
+
+Unfortunately, the computation of $F$ requires a full read through the data matrix.  Because the probability distribution is not in exponential form, there cannot be a sufficient statistic of constant dimension.\cite[pg 116]{robert}  Even so, we can do much better by using the formulas for the dual-input log gamma function and rearranging the terms.
 \begin{equation} \label{eq:fulldmf}
 F(\alpha)= \sum_{n=0}^{N-1}\sum_{k=0}^{K-1}\sum_{i=0}^{d_{n,k}-1}\ln\left(\alpha_k+i\right)-
 \sum_{n=0}^{N-1}\sum_{i=0}^{\Sigma_kd_{n,k}-1}\ln\left(\sum_{k=0}^{K-1}\alpha_k+i\right)
 \end{equation}
-Observe that all of the terms in equation~\eqref{eq:fulldmf} have a similar form.  In the first summation block, they each involve the log of an alpha plus a count.  In the second block, it’s the sum of the alphas plus a count. Since some of these terms may appear more than once, so it’s natural to gather them.  Let $M$ be the highest possible value of the index $i$, which will be equal to the highest row total.
+All of the terms in equation~\eqref{eq:fulldmf} have a similar form.  In the first summation block, they each involve the log of an alpha plus a count.  In the second block, it’s the sum of the alphas plus a count.  Some of these will be seen more than once, so it’s natural to collect the terms.  Let $M$ be the highest possible value of the index $i$, which will be equal to the highest row total.
 \[M = \max_n\Sigma_kd_{n,k}\]
-We simplify the formula for $F$ by constructing an $M$-dimensional vector $\mathbf{v}$, and a $K$ x $M$ dimensional matrix, $U$.  Let $u_{k,m}$ index the matrix $U$, and $v_m$ index the vector $\mathbf{v}$.
+
+We can simplify the formula for $F$ by constructing an $M$-dimensional vector $\mathbf{v}$, and a $K$ x $M$ dimensional matrix, $U$.  Let $u_{k,m}$ index the matrix $U$, and $v_m$ index the vector $\mathbf{v}$.
 \begin{equation} \label{eq:finaldmf}
 F(\alpha)=\sum_{k=0}^{K-1}\sum_{m=0}^{M-1}u_{k,m}\ln(\alpha_k+m)-
 \sum_{m=0}^{M-1}v_m\ln(\Sigma_k\alpha_k+m)
 \end{equation}
 
-Intuitively, the values $u_{k,m}$ represent the number of rows in the data where the count in column $k$ exceeds $m$.  The value $v_m$ represents the number of rows in the data where the total sample in the row exceeds $m$.  
+There is an intuitive meaning to the matrix $U$ and vector $\mathbf{v}$.  The value $u_{k,m}$ represents the number of rows in the data where the count in column $k$ exceeds $m$.  The value $v_m$ represents the number of rows in the data where the total sample in the row exceeds $m$.  
 \[
-u_{k,m}=\sum_{n=0}^{N-1}\mathbb{I}_{d_{n,k} > m} \qquad v_m=\sum_{n=0}^{N-1}\mathbb{I}_{\sum_{k=0}^{K-1}d_{n,k} > m}
+\begin{array}{cc} u_{k,m}=\sum_{n=0}^{N-1}\mathbb{I}_{d_{n,k} > m} & v_m=\sum_{n=0}^{N-1}\mathbb{I}_{\sum_{k=0}^{K-1}d_{n,k} > m}
+\end{array}
 \]
 \begin{algorithm}
-  \caption{Precomputation: Computing $U$ and $\mathbf{v}$ from the dataset}
+  \caption{Algorithm for computing $U$ and $\mathbf{v}$}
   \begin{algorithmic}
-  \Function{PrecomputeUV}{$D \in \mathbb{R}^{N \times K}$, $M \in \mathbb{N}$}
-    \State $u \gets \text{zeros}(K, M)$
-    \State $v \gets \text{zeros}(M)$
-    \For{$n \gets 0$ \textbf{to} $N - 1$}
-      \State $m \leftarrow 0$
-      \For {$k=0$ to $K-1$}
-        \For {$i=0$ to $D[n][k]$}
-          \State $u[k][i] \leftarrow u[k][i] + 1$
-          \State $v[m] \leftarrow v[m] + 1$        
-          \State $m \leftarrow m + 1$
-        \EndFor
+  \State $U \leftarrow 0$
+  \For  {$k=0$ to $K-1$}  \State $v_k \leftarrow 0$ \EndFor
+  \For  {$m=0$ to $M-1$}  
+    \State $C \leftarrow 0$
+    \For {$k=0$ to $K-1$}
+      \State $C \leftarrow c + D[m][k]$      
+      \For {$i=0$ to $D[m][k]$}
+        \State $U[k][i] \leftarrow U[k][i] + 1$      
       \EndFor
     \EndFor
-    \State \Return $u, v$
-  \EndFunction
+    \For {$i=0$ to $C$}
+      \State $v[i] \leftarrow v[i] + 1$      
+    \EndFor
+  \EndFor
   \end{algorithmic}
   \label{alg:uv}
 \end{algorithm}
-
-Algorithm~\ref{alg:uv} performs the key pre-computation of $U$ and $\mathbf{v}$. To obtain the gradient of F, we can now use the following formula:
+Algorithm~\ref{alg:uv} takes care of the key pre-computation. We can again look to find the gradient and Hessian of F.  The formula for the gradient is as follows:
 \begin{equation}
 g_k= \sum_{m=0}^{M-1}u_{k,m}(\alpha_k+m)^{-1}-
 \sum_{m=0}^{M-1}v_m(\Sigma_k\alpha_k+m)^{-1}
 \end{equation}
-Fortunately, the Hessian matrix below in equation~\ref{eq:hessian_dm} is still a constant plus a diagonal.  Algorithm~\ref{alg:step} can be applied to the results to perform a Newton-Raphson step.
-\begin{equation} \label{eq:hessian_dm}
+Again, the Hessian matrix is a constant plus a diagonal.  Algorithm~\ref{alg:step} can be applied to the results to perform an iteration.
+\begin{equation}
 h_{i,j}=\sum_{m=0}^{M-1}v_m(\Sigma_k\alpha_k+m)^{-2}-
 \sum_{m=0}^{M-1}u_{i,m}(\alpha_i+m)^{-2}\mathbb{I}_{i,j}
 \end{equation}
@@ -355,7 +332,7 @@ This analysis also includes Minka's fixed-point (FP) solution and a new Matlab v
 
 The proposed version makes use of the parameters $U$ and $\mathbf{v}$ and has the advantage of not having to run through the dataset multiple times.
 \begin{equation}
-\alpha_k^{*}= \alpha_k\frac{\sum_{m=0}^{M-1}u_{k,m}(\alpha_k+m)^{-1}}{\sum_{m=0}^{M-1}v_m\left(\sum_{k=0}^{K-1}\alpha_k+m\right)^{-1}}
+\alpha_k^{*}= \alpha_k\frac{\sum_{m=0}^{M-1}u_{k,m}(\alpha_k+m)^{-1}}{\sum_{m=0}^{M-1}v_m(\sum_{k=0}^{K-1}\alpha_k+m)^{-1}}
 \end{equation}
 
 This is equivalent to Wallach's algorithm using the digamma recurrence relation\cite{wallach}. The Fastfit fixed-point algorithm has an advantage over the Fastfit Newton algorithm because the bottleneck is reading the data on each iteration, and Newton's method requires more computations per data point.  While Newton's method requires computation of both the gradient and the Hessian, the fixed point algorithm needs only the terms from the gradient.  With the precalculation of $U$ and $\mathbf{v}$, that advantage for fixed-point iteration becomes less important.
@@ -518,7 +495,7 @@ legend pos= north west,
 \end{tikzpicture}
 \end{center}
 
-When $N$ gets large enough, the running time of the precomputation becomes much larger than the running time of the Newton-Raphson phase. To provide increasingly accurate intermediate answers as the data is processed, we periodically run Newton-Raphson before all the rows are processed without adding significant overhead. This allows for an implicit online learning mode, where the model's accuracy is progressively improved as new data is received.
+The running time for the Newton-Raphson phrase becomes negligible with respect to the precomputation for large enough $N$.  Suppose that one wanted to find the current estimate after every 1000 rows we add to $U$ and $\mathbf{v}$.  This would not add significant overhead and would allow for an implicit online learning mode where increasingly accurate intermediate answers are produced as the data is processed.
 
 \subsection{Limitations of the Proposed Algorithm}
 
@@ -799,7 +776,7 @@ legend pos= south east,
 
 \section{Conclusions}
 
-Theoretical analysis and experiments suggest that the proposed algorithm for computing the MLE for a Dirichlet multinomial has improved running times over typical implementations where $M$ is small and $N$ is large.
+Theoretical analysis and experiments suggest that the proposed Newton-Raphson algorithm for computing the MLE for a Dirichlet multinomial has improved running times over typical implementations where $M$ is small and $N$ is large.
 
 The proposal also provides a separation between the precomputation step and the Newton-Raphson algorithm.  In the precomputation step, the results from each row can be added independently and therefore it is easy to parellelize, stop early, or add more data.  The Newton-Raphson step, not having to read the entire dataset, runs in constant time as the number of rows increases.
 
@@ -854,16 +831,5 @@ Two implementations for the MLE estimate of the Dirichlet-multinomial have been 
 
 \bibitem{woodbury}Woodbury, M. A. (1950). Inverting modified matrices. Memorandum report, 42, 106.
 
-\bibitem{concrete}Graham, R.L., Knuth, D.E., Patashnik, O.: Concrete Mathematics: A Foundation for Computer Science, 2nd edn. Addison-Wesley (1994)
-
 \end{thebibliography}
-
-\section{Change Notes}
-\textbf{DATE}
-\begin{itemize}
-    \item Some clearer wording
-    \item Fixing some minor errors related to variable names
-    \item Fixing big bug in algorithm 1, along with alternative and explanations
-    \item Differentiate Between Categorical and Multinomial Distribution
-\end{itemize}
 \end{document}
