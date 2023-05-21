@@ -27,7 +27,7 @@ Algorithms for Multivariate Newton-Raphson for Optimization \\
 
 \author{Max Sklar\\
 Local Maximum Labs\\
-May 19, 2023
+May 20, 2023
 }
 
 \date{}
@@ -41,7 +41,7 @@ This paper concerns the special case of multivariate Newton's Method for optimiz
 
 \section{Introduction}
 
-Newton's method (or the Newton-Raphson method) is a way to approximate a solution to the equation $f(x) = 0$ for a differentiable function $f$. The method works by starting at an initial value $x_0$ and successfully updating it using the formula
+The Newton-Raphson method (or Newton's method) is a way to approximate a solution to the equation $f(x) = 0$ for a differentiable function $f$. The method works by starting at an initial value $x_0$ and successively updating it using the formula
 \[
 x_{i+1} = x_i - \frac{f(x_0)}{f'(x_0)}.
 \]
@@ -56,13 +56,13 @@ One might wish to find a local maximum or minimum of a vector function $f: \math
 \boldsymbol{x}' = \boldsymbol{x} - H^{-1}\boldsymbol{g}.
 \]
 
-Here, $\boldsymbol{g}$ represents the gradient of the $f(\boldsymbol{x})$, akin to the derivative of $f$. H represents the \textit{Hessian Matrix} which is a generalization of the single variable second derivative\footnote{Note that we are taking $\boldsymbol{x}' $ to mean \textit{the next value of $x$} and not a derivative.}.
+Here, $\boldsymbol{g}$ is the gradient of $f$, akin to the derivative. H represents the \textit{Hessian Matrix} which is a generalization of the second order derivative\footnote{Note that we are taking $\boldsymbol{x}' $ to mean \textit{the next value of $x$} and not a derivative.}.
 
-These methods are related to the popular gradient descent algorithms used in machine learning. In its simplest form, gradient descent sets $\boldsymbol{x}' = \boldsymbol{x} - \lambda\boldsymbol{g}$. By using the Hessian matrix to affect the learning rate $\lambda$, the centuries-old method is a great way to speed up a learning algorithm.
+These methods are related to the gradient descent algorithms used in machine learning. In its simplest form, gradient descent sets $\boldsymbol{x}' = \boldsymbol{x} - \lambda\boldsymbol{g}$. By using the Hessian matrix to affect the learning rate $\lambda$, the centuries-old Newton's method is a great way to speed up gradient descent.
 
 Sometimes inverting the hessian matrix is computationally impractical. In this case, the diagonal of the hessian matrix may be used instead\cite{becker}. However, there can be benefits to using the full Hessian in order to speed up convergence.
 
-This technical note shows how one can invert the hessian matrix when it is a constant plug a diagonal using the matrix inversion lemma. This technique is quite common in statistical and machine learning literature\cite[Appendix~A.2]{blei}\cite[Section~4]{sklar}\cite[p. 214]{ng}\cite{minka}, but there are many details left to fill in in terms of both manipulating the equations and turning them into a computational algorithm. Even though the process is a somewhat mechanical application of linear algebra, it can be quite complicated and some readers have requested a more detailed explanation of the chain of logic.
+This technical note shows how one can invert the hessian matrix when it is a constant plug a diagonal using the matrix inversion lemma. This technique appears many times in statistical and machine learning literature, but many details are left to fill in both for manipulating the equations and turning them into a computational algorithm. Even though the process is a somewhat mechanical application of linear algebra, it can be quite complicated and some readers have requested a more detailed explanation of the chain of logic.
 
 We aim to provide this here. This paper still requires a background in linear algebra and multivariate calculus, but more of the steps are included. It will help any readers with at least an undergraduate level understanding of linear algebra to fill in the missing steps.
 
@@ -101,7 +101,7 @@ A \textit{Newton step} for maximizing $f(\boldsymbol{\alpha})$ is defined as
 \[
     \boldsymbol{\alpha'} = \boldsymbol{\alpha} + \Delta \boldsymbol{\alpha} = \boldsymbol{\alpha} - H^{-1}\boldsymbol{g},
 \]
-where $\boldsymbol{\alpha'}$ is the updated vector after a single iteration, and $H^{-1}$ is the inverse of the Hessian matrix at $\boldsymbol{\alpha}$. Our goal is to find the step size $\Delta \boldsymbol{\alpha} = -H^{-1}\boldsymbol{g}$ given by the product of the inverse Hessian matrix and the gradient vector.
+where $\boldsymbol{\alpha'}$ is the updated vector after a single iteration, and $H^{-1}$ is the inverse of the Hessian matrix at $\boldsymbol{\alpha}$. Our goal is to find the step size $\Delta \boldsymbol{\alpha} = -H^{-1}\boldsymbol{g}$ given by the product of the inverse Hessian matrix and the gradient.
 
 \section{Diagonal and Constant Matrix Case}
 
@@ -158,7 +158,7 @@ Let $A \in \mathbb{R}^{n \times n}$ be an invertible matrix, with $\boldsymbol{u
 \left(A + \boldsymbol{u} \boldsymbol{v}^\top\right)^{-1} = A^{-1} - \frac{A^{-1}\boldsymbol{u}\boldsymbol{v}^{\top}A^{-1}}{1 + \boldsymbol{v}^{\top}A^{-1}\boldsymbol{u} }
 \end{equation}
 
-In order to apply this to our question, we make the correspondence
+In order to apply this to our question, we work with dimention $K$ instead of $n$, and make the correspondence
 \[
     \begin{pmatrix}
         A \\
@@ -173,10 +173,10 @@ In order to apply this to our question, we make the correspondence
     \end{pmatrix}.
 \]
 
-Then, we get the following result by plugging this correspondence into equation~\ref{eq:sherman}.
+By plugging this correspondence into equation~\ref{eq:sherman}, we get
 
 \[
-    H^{-1} = \left(D + c \boldsymbol{1}_K \boldsymbol{1}_K^\top\right)^{-1} = D^{-1} - \frac{D^{-1}c \boldsymbol{1}_K\boldsymbol{1}_K^{\top}D^{-1}}{1 + \boldsymbol{1}_K^{\top}D^{-1}c \boldsymbol{1}_K } = D^{-1} - \frac{D^{-1} \boldsymbol{1}_K\boldsymbol{1}_K^{\top}D^{-1}}{c^{-1} + \boldsymbol{1}_K^{\top}D^{-1} \boldsymbol{1}_K }
+    H^{-1} = \left(D + c \boldsymbol{1}_K \boldsymbol{1}_K^\top\right)^{-1} = D^{-1} - \frac{D^{-1}c \boldsymbol{1}_K\boldsymbol{1}_K^{\top}D^{-1}}{1 + \boldsymbol{1}_K^{\top}D^{-1}c \boldsymbol{1}_K } = D^{-1} - \frac{D^{-1} \boldsymbol{1}_K\boldsymbol{1}_K^{\top}D^{-1}}{c^{-1} + \boldsymbol{1}_K^{\top}D^{-1} \boldsymbol{1}_K }.
 \]
 
 Fortunately, the inverse of a diagonal matrix $D$ can be computed by simply taking the multiplicative inverses of the diagonal elements (appendix~\ref{appendix:diagonals}). Therefore, we define $\boldsymbol{d}^{-1}$ as the vector of values along the diagonal of $D^{-1}$.
@@ -199,7 +199,7 @@ We now let \(Z = c^{-1} + \sum_{k=1}^{K-1} d_k^{-1}\) to get \( H^{-1} = D^{-1} 
 \Delta \boldsymbol{\alpha} = -H^{-1} \boldsymbol{g}= - D^{-1}\boldsymbol{g} + \frac{\boldsymbol{d}^{-1} \boldsymbol{d}^{-1\,T}}{Z}\boldsymbol{g} = - D^{-1} \boldsymbol{g} + \frac{\boldsymbol{d}^{-1} \boldsymbol{d}^{-1\,T}\boldsymbol{g}}{Z}
 \]
 
-Now find a formula for a single component $k$ of $\Delta \boldsymbol{\alpha}$. (see appendix~\ref{appendix:diagonals} for manipulation of $D^{-1} \boldsymbol{g}$).
+Now we find a formula for a single component $k$ of $\Delta \boldsymbol{\alpha}$. (see appendix~\ref{appendix:diagonals} for manipulation of $D^{-1} \boldsymbol{g}$).
 
 \[
 \left(\Delta \boldsymbol{\alpha}\right)_k = - \left(D^{-1} \boldsymbol{g}\right)_k + \left(\frac{\boldsymbol{d}^{-1} \boldsymbol{d}^{-1\,T}\boldsymbol{g}}{Z}\right)_k
@@ -250,10 +250,10 @@ Suppose that the values of $\boldsymbol{\alpha}$ are all required to be positive
 
 We now say that the vector \(\boldsymbol{\beta}\) lives in \textit{log space}, meaning that every possible value will lead to a vector of only positive elements $\boldsymbol{\alpha}$ to be passed into f. We now have a new objective function \[f^*(\boldsymbol{\beta}) = f(\boldsymbol{\alpha})\].
 
-We noticed that $f^*$ and $f$ are actually the same function on transformed inputs, so when looked at from the perspective of these being values dependent on the inputs, $f^* = f$ with each being uniquely determined by either $\boldsymbol{\alpha}$ or $\boldsymbol{\beta}$. We also note that the derivative of a component of $\boldsymbol{\alpha}$ with respect to the same component of $\boldsymbol{\beta}$:
+Notice that $f^*$ and $f$ are actually the same function on transformed inputs, so when looked at from the perspective of these being values dependent on the inputs, $f^* = f$ with each being uniquely determined by either $\boldsymbol{\alpha}$ or $\boldsymbol{\beta}$ (which are determined by each other). We also note that the derivative of a component of $\boldsymbol{\alpha}$ with respect to the same component of $\boldsymbol{\beta}$ is
 
 \[
-\frac{\partial {\alpha}_k}{\partial {\beta}_k} = \frac{\partial}{\partial {\beta}_k} e^{\beta_k} = e^{{\beta}_k} = {\alpha}_k
+\frac{\partial {\alpha}_k}{\partial {\beta}_k} = \frac{\partial}{\partial {\beta}_k} e^{\beta_k} = e^{{\beta}_k} = {\alpha}_k.
 \]
 
 We will find a log-space gradient $\boldsymbol{g}^*$ to distinguish it from the old gradient. The gradient is now
@@ -262,22 +262,22 @@ We will find a log-space gradient $\boldsymbol{g}^*$ to distinguish it from the 
 {g}^*_k = \frac{\partial}{\partial \beta_k} f = \frac{\partial f}{\partial \alpha_k}  \frac{\partial \alpha_k}{\partial \beta_k} = {g}_k \alpha_k.
 \]
 
-To find the log-space Hessian $H^*$, we look at a single component $h^*_{i, j}$.
+To find the log-space Hessian $H^*$, we look at a single component $h^*_{i, j}$ to get
 
 \[
-{h}^*_{i, j} = \frac{\partial}{\partial \beta_i} \frac{\partial}{\partial \beta_j} f = \frac{\partial}{\partial \beta_i} {g}_j \alpha_j = {h}_{i, j} \alpha_j \alpha_i+ {g}_j \frac{\partial \alpha_j}{\partial \beta_i} = {h}_{i, j}(\alpha) \alpha_j \alpha_i + {g}_j\mathbb{I}_{i,j} \alpha_j
+{h}^*_{i, j} = \frac{\partial}{\partial \beta_i} \frac{\partial}{\partial \beta_j} f = \frac{\partial}{\partial \beta_i} {g}_j \alpha_j = {h}_{i, j} \alpha_j \alpha_i+ {g}_j \frac{\partial \alpha_j}{\partial \beta_i} = {h}_{i, j}(\alpha) \alpha_j \alpha_i + {g}_j\mathbb{I}_{i,j} \alpha_j.
 \]
 
-Note that for the old hessian ($H$), we know that $h_{i, j} = c + \mathbb{I}_{i,j} \boldsymbol{d}_i$. \(\mathbb{I}_{i,j}\) is the indicator function which is equal to 1 when $i = j$ and 0 otherwise. This forces the $\boldsymbol{d}_i$ terms to only appear on the diagonal\footnote{We could equivalently write $\boldsymbol{d}_j$ as $i = j$, but let's use the first subscript as a standard.} With the ability to break down $h_{i, j}$, our equation is now as follows
+\(\mathbb{I}_{i,j}\) is the \textit{indicator function} which is equal to 1 when $i = j$ and 0 otherwise. For the old hessian ($H$), we know that $h_{i, j} = c + \mathbb{I}_{i,j} \boldsymbol{d}_i$. This forces the $\boldsymbol{d}_i$ terms to only appear on the diagonal\footnote{We could equivalently write $\boldsymbol{d}_j$ as $i = j$, but let's use the first subscript as a standard.} With the ability to break down $h_{i, j}$, our equation is now
 
 \[
-{h}^*_{i, j} = \left(c + \mathbb{I}_{i,j} {d}_i \right) \alpha_j \alpha_i+ {g}_j \mathbb{I}_{i,j} \alpha_i = c \alpha_j \alpha_i + \mathbb{I}_{i,j}\left(\alpha^2_i {d}_i + {g}_i \alpha_i\right)
+{h}^*_{i, j} = \left(c + \mathbb{I}_{i,j} {d}_i \right) \alpha_j \alpha_i+ {g}_j \mathbb{I}_{i,j} \alpha_i = c \alpha_j \alpha_i + \mathbb{I}_{i,j}\left(\alpha^2_i {d}_i + {g}_i \alpha_i\right).
 \]
 
 For convenience, define the vector \(\boldsymbol{x} \in \mathbb{R}^{K}\) with \({x}_i = \alpha_i {d}_i + {g}_i\). This simplifies the hessian formula to
 
 \[
-{h}^*_{i, j} = c \alpha_j \alpha_i + \mathbb{I}_{i,j} \alpha_i {x}_i
+{h}^*_{i, j} = c \alpha_j \alpha_i + \mathbb{I}_{i,j} \alpha_i {x}_i.
 \]
 
 Note that instead of a constant matrix, we have a constant $c$ multiplied by the outer product of $\boldsymbol{\alpha}$ with itself. The outer product is illustrated here, and note how it generates the term $\alpha_j \alpha_i$.
@@ -301,13 +301,13 @@ Note that instead of a constant matrix, we have a constant $c$ multiplied by the
 \end{bmatrix}.
 \]
 
-Let ${D^*} = \operatorname{diag}(\boldsymbol{\alpha})\operatorname{diag}(\boldsymbol{x})$. We can now piece together the full version of the hessian as:
+Let ${D^*} = \operatorname{diag}(\boldsymbol{\alpha})\operatorname{diag}(\boldsymbol{x})$. We can now piece together the full version of the hessian as
 
 \[
-H^* = c \boldsymbol{\alpha} \boldsymbol{\alpha}^\top + \operatorname{diag}(\boldsymbol{\alpha})\operatorname{diag}(\boldsymbol{x}) = D^* + \boldsymbol{\alpha} c \boldsymbol{\alpha}^\top
+H^* = c \boldsymbol{\alpha} \boldsymbol{\alpha}^\top + \operatorname{diag}(\boldsymbol{\alpha})\operatorname{diag}(\boldsymbol{x}) = D^* + \boldsymbol{\alpha} c \boldsymbol{\alpha}^\top.
 \]
 
-This still fits with the Sherman-Morrison formula and we get a new correspondence
+This still fits with the Sherman-Morrison formula (equation~\ref{eq:sherman}). The difference is that we have a new correspondence which is
 \[
     \begin{pmatrix}
         A \\
@@ -379,9 +379,12 @@ Finally, this translates into the following algorithm:
   \For  {$k=0$ to $K-1$}
     \State $x[k] \gets \mathbf{g}[k]+\mathbf{\alpha}[k] \cdot \mathbf{d}[k]$
   \EndFor
-  \State $Z \gets 1/c$, $S \gets 0$
+  \State $Z \gets 1/c$
   \For  {$k=0$ to $K-1$}  
     \State $Z \gets Z + \mathbf{\alpha}[k] / \mathbf{x}[k]$
+  \EndFor
+  \State $S \gets 0$
+  \For  {$k=0$ to $K-1$}  
     \State $S \gets S + \mathbf{\alpha}[k] \cdot \mathbf{g}[k]/\mathbf{x}[k]$
   \EndFor
   \State $\mathbf{\delta} \in \mathbb{R}^{K}$
@@ -504,10 +507,6 @@ D\boldsymbol{v} = \texttt{diag}(\boldsymbol{d}) \boldsymbol{v} = \boldsymbol{d} 
 
 \begin{thebibliography}{20}
 \bibitem{becker} Becker, S and Lecun, Y., (1988) Improving the convergence of backpropagation learning with second-order methods. In Proceedings of the 1988 Connectionist Models Summer School, San Mateo, D. Touretzky, G. Hinton, and T. Sejnowski, Eds. Morgan Kaufmann, 1989, pp. 29–37.
-\bibitem{blei}Blei, D. M., Ng, A. Y., \& Jordan, M. I. (2003). Latent dirichlet allocation. the Journal of machine Learning research, 3, 993-1022.
-\bibitem{sklar}Sklar, M. (2014). Fast MLE computation for the Dirichlet multinomial. arXiv preprint arXiv:1405.0099.
-\bibitem{ng}Ng, K. W., Tian, G. L., \& Tang, M. L. (2011). Dirichlet and Related Distributions: Theory, Methods and Applications (Vol. 888). John Wiley \& Sons.
-\bibitem{minka}Minka, T. (2000). Estimating a Dirichlet distribution. Technical report, M.I.T., 2000.
 \bibitem{woodbury}Woodbury, M. A. (1950). Inverting modified matrices. Memorandum report 42, Statistical Research Group. Princeton University.
 \bibitem{sherman}Sherman, Jack, and Winifred J. Morrison. (1950). Adjustment of an inverse matrix corresponding to a change in one element of a given matrix. The Annals of Mathematical Statistics 21.1 (1950): 124-127.
 

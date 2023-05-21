@@ -243,14 +243,15 @@ H^{-1}=I\mathbf{d}^{-1}-\frac{\mathbf{d}^{-1}\mathbf{1}\mathbf{1}^T\mathbf{d}^{-
   \Function{StepInLogSpace}{$\alpha \in \mathbb{R}^{K},\mathbf{g},\mathbf{d},c$}
   \State $x \in \mathbb{R}^{K}$
   \For  {$k=0$ to $K-1$}
-    \State $x_k \gets \mathbf{g}[k]-\alpha[k] \cdot d[k]$
+    \State $x[k] \gets \mathbf{g}[k]+\mathbf{\alpha}[k] \cdot \mathbf{d}[k]$
   \EndFor
-  \State $Z \gets 0$
-  \For  {$k=0$ to $K-1$}  \State $Z \gets Z + \alpha[k] / x[k]$ \EndFor
-  \State $S \gets 0$
-  \For  {$k=0$ to $K-1$}  \State $S \gets S + 1/(1+Z \cdot c)/x[k]$ \EndFor
-  \State $\delta \in \mathbb{R}^{K}$
-  \For  {$k=0$ to $K-1$}  \State $\delta[k] \gets \mathbf{g}[k] / \mathbf{d}[k] *(1-\mathbf{c}*\alpha[i]*S)$ \EndFor
+  \State $Z \gets 1/c$, $S \gets 0$
+  \For  {$k=0$ to $K-1$}  
+    \State $Z \gets Z + \mathbf{\alpha}[k] / \mathbf{x}[k]$
+    \State $S \gets S + \mathbf{\alpha}[k] \cdot \mathbf{g}[k]/\mathbf{x}[k]$
+  \EndFor
+  \State $\mathbf{\delta} \in \mathbb{R}^{K}$
+  \For  {$k=0$ to $K-1$}  \State $\mathbf{\delta}[k] \gets (S / Z - \mathbf{g}[k]) / \mathbf{x}[k]$ \EndFor
   \State \Return $\delta$
   \EndFunction
   \end{algorithmic}
