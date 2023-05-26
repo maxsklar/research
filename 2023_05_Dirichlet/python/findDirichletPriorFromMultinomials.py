@@ -57,7 +57,7 @@ logging.debug("all data loaded into memory")
 logging.debug("time to load memory: ", dataLoadTime - startTime)
 
 priors = DE.findDirichletPriors(ss, priors)	
-print "Final priors: ", priors
+print("Final priors: ", priors)
 logging.debug("Final average loss:", DE.getTotalLoss(priors, ss))
 logging.debug("best loss: ", DE.getTotalLoss([1,2], ss))
 

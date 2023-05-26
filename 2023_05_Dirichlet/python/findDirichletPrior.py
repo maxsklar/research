@@ -37,7 +37,7 @@ startTime = time.time()
 parser = OptionParser()
 parser.add_option('-s', '--sampleRate', dest='sampleRate', default='1', help='Randomly sample this fraction of rows')
 parser.add_option('-K', '--numCategories', dest='K', default='2', help='The number of (tab separated) categories that are being counted')
-parser.add_option('-M', '--maxCountPerRow', dest='M', type=int, default=sys.maxint, help='The maximum number of the count per row.  Setting this lower increases the running time')
+parser.add_option('-M', '--maxCountPerRow', dest='M', type=int, default=sys.maxsize, help='The maximum number of the count per row.  Setting this lower increases the running time')
 parser.add_option("-L", '--loglevel', action="store", dest="loglevel", default='DEBUG', help="don't print status messages to stdout")
 parser.add_option('-H', '--hyperPrior', dest='H', default="", help='The hyperprior of the Dirichlet (paper coming soon!) comma separated K+1 values (Beta then W)')
 parser.add_option('-i', '--iterations', dest='iterations', default='50', help='How many iterations to do')
@@ -87,7 +87,7 @@ for row in reader:
 	idx += 1
 
 	if (random.random() < float(options.sampleRate)):
-		data = map(int, row)
+		data = list(map(int, row))
 		if (len(data) != K):
 			logging.error("There are %s categories, but line has %s counts." % (K, len(data)))
 			logging.error("line %s: %s" % (idx, data))
@@ -119,7 +119,7 @@ for i in range(0, K):
 
 priors = DME.findDirichletPriors(dataObj, priors, iterations, Beta, W)	
 
-print "Final priors: ", priors
+print("Final priors: ", priors)
 logging.debug("Final average loss: %s" % DME.getTotalLoss(priors, dataObj, Beta, W))
 
 totalTime = time.time() - dataLoadTime
