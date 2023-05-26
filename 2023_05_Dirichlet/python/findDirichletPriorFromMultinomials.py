@@ -30,7 +30,7 @@ K = int(options.K)
 
 csv.field_size_limit(1000000000)
 reader = csv.reader(sys.stdin, delimiter='\t')
-print "Loading data"
+print("Loading data")
 priors = [1.0/K]*K
 
 # Special data vector
@@ -41,14 +41,14 @@ for row in reader:
 	i += 1
 
 	if (random.random() < float(options.sampleRate)):
-		data = map(float, row)
+		data = list(map(float, row))
 		if (len(data) != K):
-			print "Error: there are " + str(K) + " categories, but line has " + str(len(data)) + " counts."
-			print "line " + str(i) + ": " + str(data)
+			print("Error: there are " + str(K) + " categories, but line has " + str(len(data)) + " counts.")
+			print("line " + str(i) + ": " + str(data))
 		
 		for k in range(0, K): ss[k] += math.log(data[k])
 
-	if (i % 1000000) == 0: print "Loading Data", i
+	if (i % 1000000) == 0: print("Loading Data", i)
 
 for k in range(0, K): ss[k] /= i
 

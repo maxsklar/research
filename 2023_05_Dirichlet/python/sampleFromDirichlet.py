@@ -14,8 +14,8 @@ parser.add_option('-O', '--outputType', dest='O', default='multnomials', help='T
 (options, args) = parser.parse_args()
 
 
-alphas = map(float, options.A.split(","))
-K = len(list(alphas))
+alphas = list(map(float, options.A.split(",")))
+K = len(alphas)
 
 if (options.O == "ss"):
   for i in range(0, options.N):
